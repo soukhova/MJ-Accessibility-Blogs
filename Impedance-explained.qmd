@@ -1,0 +1,277 @@
+---
+title: "Planning with accessibility measures: impedance functions"
+format: docx
+editor: source
+author:
+  - name: Anastasia Soukhov
+    email: soukhoa@mcmaster.ca
+    affiliation: School of Earth, Environment and Society, McMaster University, Hamilton, ON, L8S 4K1, Canada
+bibliography: bibliography.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r library-setup, echo=FALSE}
+library(TTS2016R)
+library(sf)
+library(ggplot2)
+# library(tmap)
+library(tidyverse)
+# library(accessibility)
+```
+
+```{r import-data}
+ggh_pd <- TTS2016R::ggh_pd
+ggh_pd <- st_buffer(ggh_pd, dist=0)
+ggh_taz <- TTS2016R::ggh_taz
+ggh_taz <- st_buffer(ggh_taz, dist=0)
+ggh_taz <-  st_join(ggh_taz, ggh_pd %>% transmute(PD),left = TRUE, largest = TRUE) #adding PD, we want to only visualize Hamilton PD 1
+
+od  <- TTS2016R::od %>% filter( !is.na(travel_time)) %>% mutate(travel_time = ifelse(travel_time == 0, NA, travel_time))
+```
+
+```{r intra-zonal-travel-time-est-1, include=FALSE}
+#lets assign intrazonal trip travel times to be anywhere from 1 min to the 25th percentile (of the planning region, there are 147 in the GGH). The travel time assignment will be linearly weighted by the percentile rank of their TAZ area within the planning region. There are 4137 OD pairs that are intrazonal (i.e., have an NA travel_time), of the total 103,076 this is not a lot but for completeness, lets do it!
+od <- od %>% merge(ggh_taz %>% st_drop_geometry() %>% transmute(GTA06,PD, AREA), by.x = "Origin", by.y="GTA06")
+
+area_adj_tt_list <- od %>% 
+  group_by(PD) %>% 
+  summarise(Origin,
+            Destination,
+            AREA,
+            perc_AREA = rank(AREA)/length(AREA),  #the percentile rank of the area, i.e., the largest area TAZ is close to 1 and the median area TAZ is 0.5 and the lowest size TAZ is close to 0
+            q25_tt = quantile(travel_time, 0.25, na.rm = T) %>% as.numeric(),
+            travel_time_adj =  perc_AREA*(q25_tt),
+            .groups = "drop")
+
+area_adj_tt_list <- area_adj_tt_list %>% mutate(travel_time_adj = ifelse(travel_time_adj <= 1, 1, travel_time_adj)) %>%  
+ #make sure no travel times are less than 1 minute 
+  rename(AREA.x = AREA,
+         PD.x = PD)
+  
+# Checking if the 25th percentile travel time for each PD is the same as the original OD -> this is to ensure that 'q25_tt" is correct. For ex. PD 3 has a 1st Qu. tt of 12, and the 'list' also has this same value. The 'perc_AREA' col. also has has a range between close to 0 and close to 1, this is what we expect! So the group_by() operation above did what we wanted.
+od %>% filter(PD == 1) %>% select(travel_time) %>% summary()
+area_adj_tt_list %>% filter(PD.x == 1) %>% select(q25_tt) %>% summary()
+area_adj_tt_list %>% filter(PD.x == 1) %>% select(perc_AREA) %>% summary()
+
+# merge this adj col. to the original od list, and fill in all NA travel times with these newly generated ones.
+od <- od %>% merge(area_adj_tt_list %>% select(Origin, Destination, PD.x, travel_time_adj, AREA.x), by=c("Origin", "Destination")) 
+
+#check to make sure the AREA and PD are identical -- good they are, they match up to the original OD number of 103076. 
+sum(od$PD.x == od$PD)
+sum(od$AREA.x == od$AREA)
+
+# we can now drop these PD.x and AREA.x col. since we determined they are duplicats.
+od <- od %>% select(-c("PD.x", "AREA.x"))
+
+# we should also now create a new travel_time_adj col. where the NA are filled in with our calculated intrazonal tts and the inter-zonal tt remain.
+od <- od %>% mutate(travel_time_coale = coalesce(travel_time, travel_time_adj))
+```
+
+```{r select-hamilton-origins}
+#keeping only trips originating from Hamilton IDs (the planning district of Hamilton)
+ham_o_ids <- ggh_taz %>% filter(PD == 46) %>% data.frame() %>% transmute(GTA06, AREA) #list of hamilton IDs
+
+od_HAM_origin <- od %>% filter(Origin %in% ham_o_ids$GTA06) #only keeping od trips that originate within Hamilton
+```
+
+```{r exploring-traveltimes-hamilton, include=FALSE}
+#this is just to explore how the area relates to travel time... better than just assigning all to the 25th quantile I guess!.
+ggplot(od_HAM_origin %>% filter(travel_time_coale <= 20), aes(x=travel_time_coale, y=AREA)) + geom_point()
+```
+
+*Accessibility* (or *access*) has many definitions. Within the context of transportation planning, accessibility can be defined as a measure of the amount of *potential interaction* a population has with opportunities in a given region based on their means of transportation: the population are the people that live within the region and the opportunities are the destinations of interest to the population or of the transportation network itself. The population can be the total population or any subset in the region and the opportunities that can be modeled are limitless, for instance, they can be food markets, healthcare services, schools, places of employment, or even other populations. The output from accessibility measures are typically a value or normalized score that is assigned to each spatial unit (e.g., a census tract, neighbourhood, parcel, etc.) within the region. This score can help an analyst identify areas of spatial disparities in access for the region. For a clarifying review of of how accessibilty measures have been used in the literature see the paper [@wuUnifyingAccess2020].
+
+Because of the adaptability of accessibility measure methods, they have been used in wide variety of transportation research and planning work throughout the years. What makes them popular is how they can be used to intuitively defined and used to identify region- and opportunity- specific spatial disparities. Through the identification of disparities, interventions can be implemented to reduce them. This is an important component in planning for equitable transportation service provision.
+
+This blog post is the first part of a multi-part series. This series aims to walk readers through the potential uses of accessibility measures in transportation equity planning. This post explores how we can choose to assume travel behaviour in accessibility measures. In the subsequent posts, how impedance functions impact accessibility measures, types of accessibility methods and methods to analysis equity will be discussed.
+
+## Counting opportunities through decaying distance
+
+Many accessibility measures derive from one proposed first proposed by [@hansen1959] from definitions of demographic potential interaction defined by [@stewartDemographicGravitationEvidence1948]. This accessibility measure $A_i$ is represented in **Equation 1**.
+
+$$
+A_i = \sum_{j=1}^JO_j \cdot f(c_{ij})
+$$ 
+
+Where: the accessibility score $A_i$ is a value calculated for each spatial unit $i$ through the summation of the number of opportunities $O$ at $j$ multiplied by the distance-decay function $f(c_{ij})$. $f(c_{ij})$ is some function that reflects how travel cost $c_{ij$ changes as distance between origin $i$ and destination $j$ changes. Recall, $i$ denotes each origin spatial unit in the region (e.g., $i$ represents one given census tract in the census tracts within the region). $j$ represents the destination spatial unit in the region.
+
+The distance decay function $f(c_{ij})$ meters how much "potential interaction" a population at $i$ can have with opportunities at all $j$s. It is now treated as some generalized travel cost $c_{ij$ - be it distance, cost, or travel time. So, generally speaking opportunities that are closer are more likely to be interacted with than opportunities that are further from the population at $i$. As such, $f(c_{ij})$ values for trips from $i$ to those $j$s are larger so a larger values of the $O_j$ enter the summation. Conversely, it is highly unlikely that the population at $i$ will interact with certain opportunities at $j$ that are some *far* distance away. For those far trips, $f(c_{ij})$ is a value close to or equal to zero so a negligible amount of $O_j$ enter the summation.
+
+In short: the distance decay function $f(c_{ij})$ allows the accessibility analyst to define how distance defines the relationship between where people are (population) and where they go/want to go (opportunities).
+
+From this perspective, the definition of the distance-decay function $f(c_{ij})$ is incredibly important. Let's go over three commonly defined distance-decay functions in accessibility research and their impact on opportunity-counting at specific travel costs.
+
+The first is shown in **Equation 2.1**, and is the foundation of the cumulative opportunity accessibility measure approach (this measure is discussed in the next post **LINK**). The distance-decay function $f(c_{ij})$ is binary, where the function is either 1 or 0. It is 1 if the travel cost from $i$ to $j$ is below the threshold $T$. Conversely, it is 0 if the travel cost is above a certain threshold $T$. Threshold $T$ should be selected carefully to best fit the modelled population-to-opportunity context.
+
+$$
+f(c_{ij})^* =
+\begin{cases}
+ 1\, & \text{if }c_{ij}\leq\text{T}\\
+ 0  & \text{otherwise}
+ \end{cases}       
+$$
+
+Next, two more complex distance-decay $f(c_{ij})$ functions are shown: the commonly used exponential density function along with a gamma density function (part of the exponential function facilities but utilizes the gamma function $\Gamma(\alpha)$). The following **Equation 2.2** and **Equation 2.3** define these two theoretical functions with their parameters represented by $\lambda$, and $\alpha$ and $\sigma$. The parameters in these theoretical functions should be calibrated to best fit empirically observed population-to-opportunity travel data.
+
+$$
+f(c_{ij}, \beta)^{**} = \lambda e^{-\lambda\cdot c_{ij}}\\
+\text{for }c_{ij} \geq 0
+$$
+
+$$
+f(c_{ij})^{***} = \frac{1}{\sigma^\alpha\Gamma(\alpha)} c_{ij}^{\alpha-1} \cdot e^{{-c_{ij}}/{\sigma}} \\ 
+\text{for }c_{ij}, \alpha, \sigma > 0
+$$
+
+In all three equations, there are parameters that need to be defined. A useful technique is to explore empirically observed origin-to-destination (OD) travel data as a trip length distribution (TLD). Through exploration, we can select parameters for each function that best fit the TLD.
+
+For the purpose of demonstration in this blog post series, the empirical data is taken for the home-to-work flows from Hamilton Center from the R data package {TTS2016R}. The flows are taken at the spatial unit of traffic analysis zones (TAZ). This package contains a subset of home-to-work flows the 2016 Transportation Tomorrow Survey (TTS) as well as calculated road-network car travel times (calculated using {r5r}). {TTS2016R} is detailed in this publication [@soukhovTTS2016RDataSet2023] and is freely available to be explored here (<https://soukhova.github.io/TTS2016R/>).
+
+The TLD for this subset of data is shown in black in the plot below.
+
+```{r creating-TLD}
+#creating 1 row for each OD trip (i.e., Persons = frequency)
+all_tt <- od_HAM_origin  %>% dplyr::select(Persons, travel_time_coale)
+all_tt <- all_tt[rep(seq_len(dim(all_tt)[1]), all_tt$Persons), 2]
+# # all_tt_binned <- cut(all_tt, breaks = seq(0, 90, 5), include.lowest=TRUE, labels = c(5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90)) 
+# all_tt_binned <- cut_width(all_tt, 5, boundary = 0) %>% as.numeric() #cuts data into 0-5, 5-10, 10-20.... 85-90 bins, and then they are relabelled from 1 to 18 (18 us the 85-90 bin)
+
+# all_tt_trans <- scales::rescale(all_tt, to = c(0.0,1)) #scaling values, from 0 to 1 range. 
+# all_tt_trans_binned <- scales::rescale(all_tt_binned, to = c(0.0,1)) #scaling values, from 0 to 1 range. 
+
+# fitdistrplus::descdist(data=all_tt)
+# fitdistrplus::descdist(data=all_tt_trans)
+# fitdistrplus::descdist(data=all_tt_binned)
+# summary(all_tt)
+```
+
+```{r plotting-just-TLD}
+
+empirical <-  density(all_tt)
+empirical_x <- empirical$x
+empirical_y <- empirical$y #%>% scales::rescale()
+empirical <- data.frame(f = empirical_y,
+                        x = empirical_x,
+                        type = "Empirical")
+
+ggplot(data = empirical) + geom_line(aes(x=x, y=f), color="grey30") + 
+  scale_x_continuous(expand = c(0, 0), limits = c(0, 88)) +
+  theme_classic() +
+  theme(legend.position  = "none") +
+  xlab(bquote(c[ij])) +
+  ylab(bquote(f(c[ij])))
+
+# ggplot(data = all_tt %>% transform(), aes(x= X_data))+ 
+#   geom_density(aes(y=..scaled.. , colour = "Empirical (y-scaled)")) +
+#   stat_function(fun = dgamma, args = list(shape = 1.60289258, rate = 0.08911374), aes(colour = "Gamma (y-scaled) (Eq 2.3)")) + 
+#   # stat_function(fun = dlnorm, args = list(meanlog = 2.5460350, sdlog = 0.8821717), aes(colour = "log normal")) + 
+#   # stat_function(fun = dbeta, args = list(shape1 = 0.8701527, shape2 = 3.5872471), aes(colour = "beta")) +
+#   stat_function(fun = dexp, args = list(rate = 0.05560581), aes(colour = "Exp (y-scaled) (Eq 2.2)")) + 
+#   stat_function(fun = binary, aes(colour = "Binary (Eq 2.1)")) +
+#   scale_x_continuous(expand = c(0, 0), limits = c(0, 88)) +
+#   theme_classic()
+```
+
+The TLD is the probability density distribution (read wiki here: XXX) of the travel costs associated with the OD trips. In the plot above, the y axis represents the probability density of a OD trip occurring at a given travel cost (here, travel time minutes) for commuting trips from origins in Hamilton Center. The travel time is displayed on the x-axis. It can be observed that a 13 minute trip is the most likely, and trips beyond the 45 min length are the least likely to occur in this subset of the data set.
+
+Now let's fit the parameters of the binary, exponential, and gamma function as closely to the TLD captured above. In the binary function, the threshold $T$ is taken to be the mean of the TLD ($T =$ 18 mins). For the exponential and gamma functions, the R package {fitdistrplus} is used to generate parameters that best-fit the TLD: the maximum likelihood fitting-method and the Nelder-Mead direct optimization algorithms are used (Delignette-Muller and Dutang, 2015). The default values for all three functions are summarized as follows:
+
+-   Binary function ($f(c_{ij})^*$ - red): $T$ is 18 mins
+
+-   Exponential function ($f(c_{ij})^{**}$ - green)\*: $\beta$ (rate) is 0.056
+
+-   Gamma function ($f(c_{ij})^{***}$ - blue)\*: $\alpha$ (shape) is 1.603 and $\beta$ (rate) is 0.089
+
+-   It should be noted that the exponential and gamma functions were fit to the theoretical distributions and then re-scaled onto a 0 to 1 y-axis.
+
+```{r testing-different-impedance-models, echo=FALSE, warning=FALSE}
+# beta_ <- fitdistrplus::fitdist(data=all_tt_trans, "beta", method="mme", optim.method="Nelder-Mead", start=list(shape1=0.5, shape2=3))
+# beta_
+# plot(beta_)
+
+# I'm picking gamma because it's part of the exponential family. Beta seems to be a better fit but its a bit more complicated. Gamma is a better fit than the less-complicated exp dist. The empirical data is not confidently 'from' any theoretical distribution (according to Kolmogorov-Smirnov test), but certain distirbutions fit the data better than others. 
+gamma_ <- fitdistrplus::fitdist(data=all_tt, "gamma", method="mle", optim.method="Nelder-Mead")
+# gamma_
+# plot(gamma_)
+
+
+#and we pick exponential for simplicity. It also fits okay!
+exp_ <- fitdistrplus::fitdist(data=all_tt, "exp", method="mle", optim.method="Nelder-Mead")
+# exp_
+# plot(exp_)
+
+# lognorm_ <- fitdistrplus::fitdist(data=all_tt, "lnorm", method="mle", optim.method="Nelder-Mead")
+# lognorm_
+# plot(lognorm_)
+
+# ks.test(all_tt_trans, "pbeta", 0.5346627, 1.5293404)
+# ks.test(all_tt, "plnorm", 2.6319398, 0.7176736)
+# ks.test(all_tt %>% sample(100), "pgamma", shape = 1.60289258, rate = 0.08911374)
+
+# #generate dataset of 100 values that follow a Poisson distribution with mean=5
+# data <- rgamma(n=500000, shape = 1.60289258, rate = 0.08911374)
+# #perform Kolmogorov-Smirnov test
+# ks.test(data, "pgamma", shape = 1.60289258, rate = 0.08911374)
+```
+
+```{r plotting-impedance-functions, echo=FALSE}
+#shape into 1 data frame for plotting
+# travel_costs <- seq(1, 88, 1)
+
+travel_costs <- unique(od$travel_time_coale)
+
+# binary <- decay_binary(cutoff = 18)
+# binary_frame <- data.frame(binary = as.numeric(binary(travel_costs)))
+
+fit_binary <- data.frame(f = ifelse(travel_costs>= 18, 0, 1) , #already scaled from 1 to 0 
+                         x = travel_costs,
+                         type = "Binary") 
+fit_dexp <- data.frame(f = dexp(travel_costs, rate = 0.05560581) %>% scales::rescale(),
+                       x = travel_costs,
+                       type = "Exp")
+fit_dgamma <- data.frame(f = dgamma(travel_costs, shape = 1.60289258, rate = 0.08911374) %>% scales::rescale(),
+                         x = travel_costs,
+                         type = "Gamma")
+
+empirical <-  density(all_tt)
+empirical_x <- empirical$x
+empirical_y <- empirical$y %>% scales::rescale()
+empirical <- data.frame(f = empirical_y,
+                        x = empirical_x,
+                        type = "Empirical")
+
+TLDs <- rbind(fit_binary, fit_dexp, fit_dgamma, empirical)
+
+ggplot(data = TLDs) + geom_line(aes(x=x, y=f, color=type), size=0.6) + 
+    scale_x_continuous(expand = c(0, 0), limits = c(1, 88)) +
+  theme_classic() +
+  scale_color_manual(name = "Functions",
+                     values = c("Red", "grey30", "Green", "Blue")) +
+  xlab(bquote(c[ij])) +
+  ylab(bquote(f(c[ij])))
+
+# ggplot(data = all_tt %>% transform(), aes(x= X_data))+ 
+#   geom_density(aes(y=..scaled.. , colour = "Empirical (y-scaled)")) +
+#   stat_function(fun = dgamma, args = list(shape = 1.60289258, rate = 0.08911374), aes(colour = "Gamma (y-scaled) (Eq 2.3)")) + 
+#   # stat_function(fun = dlnorm, args = list(meanlog = 2.5460350, sdlog = 0.8821717), aes(colour = "log normal")) + 
+#   # stat_function(fun = dbeta, args = list(shape1 = 0.8701527, shape2 = 3.5872471), aes(colour = "beta")) +
+#   stat_function(fun = dexp, args = list(rate = 0.05560581), aes(colour = "Exp (y-scaled) (Eq 2.2)")) + 
+#     stat_function(fun = binary, aes(colour = "Binary (Eq 2.1)")) +
+#   scale_x_continuous(expand = c(0, 0), limits = c(0, 88)) +
+#   theme_classic()
+```
+
+The above plot presents some interesting findings. Overall, the higher the $f(c_{ij})$, the more opportunities that are available at destination $j$ can be interacted with.
+
+The binary function, when implemented into an accessibility calculation, assumes travelers are indifferent to travel cost. Travelers are assumed to either totally interact with an opportunity or not interact at all. So $f(c_{ij})$ is 0 for trips that are less than or equal to 18 mins and $f(c_{ij})$ is 1 for all longer trips. For the binary function, selecting the threshold $T$ is typically informed by an empirical or normative travel cost threshold (e.g., the majority of people will only drive 15 mins to a grocery store (empirical), all people in a region should be able to reach a food market within a 400 m walking distance (normative)).
+
+If implementing the exponential and gamma functions within an accessibility calculation, then the analyst is assuming the population *is* sensitive to travel cost but in different ways. With the exponential function, the shorter the travel cost $c_{ij}$, the higher the $f(c_{ij})$ value. This curve is intuitive to understand but when comparing it to the empirical TLD (black) curve, we can see that the observed travel behaviour does not closely match this curve. Trip lengths that are approximately 13 mins in length are the most likely (assigned $f(c_{ij}) = 1$) and trips that are longer and shorter than this length occur less often and are assigned decreasing $f(c_{ij})$ values. For this reason, it can be seen that the gamma function provides a fit that is closest to the empirical curve, but as described in **Equation 2.3**, has a more complex formulation.
+
+Overall, the distance-decay function reflects your assumptions about travel behaviour. The selection of the curve and associated parameters reflects how much impedance people face reaching opportunities and hence their potential interaction. For this reason, $f(c_{ij})$ functions are also known as *impedance functions*. The concept of the impedance function is used to explain accessibility functions in the next post. In the meantime, feel free to explore the parameters interactively for the binary, exponential and gamma functions at this ([URL](URLLL)).
+
+The TLD used in this post is a subset of data from {TTS2016R}, the goodness-of-fit criteria and diagnostics from {fitdistrplus} are used for model parameter selection, plots are generated using {ggplot2}, and spatial objects are manipulated using {sf}, along with base {R} functions. All the code and text in this post(including the interactive plot) is available in this GitHub repository ([here](URLLL)).
+
+## References

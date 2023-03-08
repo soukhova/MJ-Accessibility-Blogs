@@ -1,0 +1,98 @@
+---
+title: "Testing-accessibility-package"
+format: html
+editor: visual
+---
+
+```{r}
+library(glue)
+library(sf)
+library(tmap)
+library(tidyverse)
+```
+```{r}
+remotes::install_github("ipeaGIT/accessibility")
+library(accessibility)
+```
+
+```{r spatial-avail-function, echo=FALSE}
+sp_avail_detailed <- function(x, o_id, d_id, pop, opp, r, f, alpha = 1){
+  
+  o_id <- rlang::enquo(o_id)
+  d_id <- rlang::enquo(d_id)
+  pop <- rlang::enquo(pop)
+  opp <- rlang::enquo(opp)
+  r <- rlang::enquo(r)
+  f <- rlang::enquo(f)
+  
+  sum_pop <- x %>%
+    dplyr::distinct(!!o_id,
+                    .keep_all = TRUE) %>%
+    dplyr::mutate(sum_pop = !!r*(!!pop)^alpha) %>%
+    dplyr::pull(sum_pop) %>%
+    sum()
+  
+  f_p <- dplyr::pull(x, !!r) * dplyr::pull(x, !!pop)^alpha / sum_pop
+  
+  sum_impedance <- x %>%
+    dplyr::group_by(!!d_id) %>%
+    dplyr::summarize(sum_impedance = sum(!!f))
+  
+  x <- x %>%
+    dplyr::left_join(sum_impedance,
+                     by = rlang::as_name(d_id))
+  
+  f_c <- dplyr::pull(x, !!f) / x$sum_impedance
+  
+  x$f_c <- f_c
+  x$f_p <- f_p
+  
+  sum_pa <- x %>%
+    dplyr::group_by(!!d_id) %>%
+    dplyr::summarize(sum_pa= sum(f_p * f_c))
+  
+  x <- x %>%
+    dplyr::left_join(sum_pa,
+                     by = rlang::as_name(d_id))
+  x$f_t <- (f_p * f_c) / dplyr::pull(x, sum_pa)
+  
+  x %>%
+    dplyr::mutate(V_ij = !!opp * f_t)
+}
+```
+
+Example from reference:
+```{r}
+# the example below is based on Soukhov et al. (2023) paper
+travel_matrix <- data.table::data.table(
+  from_id = rep(c("A", "B", "C"), each = 3),
+  to_id = as.character(c("A", "B", "C"), each = 3),
+  travel_time = c(15, 30, 100, 30, 15, 100, 100, 100, 15)
+)
+land_use_data <- data.table::data.table(
+  id = c("A", "B", "C"),
+  population = c(50000, 150000, 10000),
+  jobs = c(100000, 100000, 10000)
+)
+```
+
+```{r}
+my_exp <- function(x) {
+  weights <- dexp(x, rate = 0.1) %>% scales::rescale()
+  return(weights)
+}
+
+df <- spatial_availability(
+  travel_matrix,
+  land_use_data,
+  opportunity = "jobs",
+  travel_cost = "travel_time",
+  demand = "population",
+  decay_function = my_exp
+)
+df
+```
+
+- han-type accessibility (S_i)... I'm not sure, are we right or is the package? Let's check together!
+- shen-type accessibility (a_i). The package is right and we are only 2/3 right. This can be confirmed because, each i value multiplied by workers and summed should equal to the total number of opportunities. This occurs for all three imped funcs for the package but only occurs for 2 of the 3 impedance functions for our calculation (just gamma and binary).
+- spatial availability, we are right and the package is wrong? Interestingly, for the package, the results sum up to the total number of opportunities but the individual values are not equal!!
