@@ -83,12 +83,14 @@
       "Source": "GitHub",
       "RemoteType": "github",
       "RemoteHost": "api.github.com",
-      "RemoteRepo": "TTS2016R",
       "RemoteUsername": "soukhova",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "69ba47177bb1ae4bf267a7f1da2297de48678003",
-      "Hash": "3225bee6033aa59338035872a2545a8a",
-      "Requirements": []
+      "RemoteRepo": "TTS2016R",
+      "RemoteRef": "master",
+      "RemoteSha": "18b75273c71c2e6125e3d6c84c01f312ce13709f",
+      "Hash": "608f2a24c973a629a8d4fe30dddfaef3",
+      "Requirements": [
+        "magrittr"
+      ]
     },
     "XML": {
       "Package": "XML",
@@ -112,11 +114,11 @@
       "Source": "GitHub",
       "RemoteType": "github",
       "RemoteHost": "api.github.com",
-      "RemoteRepo": "accessibility",
       "RemoteUsername": "ipeaGIT",
-      "RemoteRef": "HEAD",
+      "RemoteRepo": "accessibility",
+      "RemoteRef": "main",
       "RemoteSha": "a161ce3db1009ffa13feac54725d365367c90496",
-      "Hash": "43b6b5aa7c9386d17ed5d233406ed644",
+      "Hash": "7694cad3d4742f371eb016b65b8620ce",
       "Requirements": [
         "Rdpack",
         "checkmate",
