@@ -78,6 +78,7 @@ ggh_taz <-  st_join(ggh_taz, ggh_pd %>% transmute(PD),left = TRUE, largest = TRU
 
 # drop travel times that have destinations
 od  <- TTS2016R::od %>% filter( !is.na(travel_time)) %>% 
+  mutate(travel_time = ifelse(travel_time == 0, NA, travel_time)) %>% # THIS MUST BE ADDED IN!!!
   mutate(travel_time = as.integer(ifelse(Destination == 9998 | Destination == 8888 | Origin == 9998 | Origin == 8888 
                               | Destination >= 9000 | Origin >= 9000, NA, travel_time)))
 
