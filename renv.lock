@@ -79,15 +79,15 @@
     },
     "TTS2016R": {
       "Package": "TTS2016R",
-      "Version": "0.0.0.9000",
+      "Version": "0.0.1",
       "Source": "GitHub",
       "RemoteType": "github",
       "RemoteHost": "api.github.com",
       "RemoteUsername": "soukhova",
       "RemoteRepo": "TTS2016R",
-      "RemoteRef": "master",
-      "RemoteSha": "18b75273c71c2e6125e3d6c84c01f312ce13709f",
-      "Hash": "608f2a24c973a629a8d4fe30dddfaef3",
+      "RemoteRef": "da94850c4f9e930cbf1b30a94a81d8f976c0ec14",
+      "RemoteSha": "da94850c4f9e930cbf1b30a94a81d8f976c0ec14",
+      "Hash": "ae4734e1caee4e096f48a2a342bdb676",
       "Requirements": [
         "magrittr"
       ]
@@ -114,11 +114,11 @@
       "Source": "GitHub",
       "RemoteType": "github",
       "RemoteHost": "api.github.com",
-      "RemoteUsername": "ipeaGIT",
+      "RemoteUsername": "paezha",
       "RemoteRepo": "accessibility",
       "RemoteRef": "main",
-      "RemoteSha": "a161ce3db1009ffa13feac54725d365367c90496",
-      "Hash": "7694cad3d4742f371eb016b65b8620ce",
+      "RemoteSha": "aa6d9c881c34c729ed44d969148e54ba3ee2a71f",
+      "Hash": "8e80662907a1aaa1ceec0f38e5da2de6",
       "Requirements": [
         "Rdpack",
         "checkmate",
@@ -1268,14 +1268,6 @@
       "Requirements": [
         "tibble"
       ]
-    },
-    "remotes": {
-      "Package": "remotes",
-      "Version": "2.4.2",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "227045be9aee47e6dda9bb38ac870d67",
-      "Requirements": []
     },
     "renv": {
       "Package": "renv",

@@ -1,18 +1,17 @@
 ---
 title: "Testing-accessibility-package"
 format: html
-editor: visual
+editor: source
 ---
 
 ```{r}
-library(glue)
-library(sf)
-library(tmap)
-library(tidyverse)
-```
-```{r}
-remotes::install_github("ipeaGIT/accessibility")
-library(accessibility)
+# Package calls annotated with package {annotater}
+library(dplyr) # A Grammar of Data Manipulation
+library(glue) # Interpreted String Literals
+library(ggplot2) # Create Elegant Data Visualisations Using the Grammar of Graphics
+library(sf) # Simple Features for R
+library(tmap) # Thematic Maps
+library(accessibility) # Transport Accessibility Measures
 ```
 
 ```{r spatial-avail-function, echo=FALSE}
@@ -62,6 +61,7 @@ sp_avail_detailed <- function(x, o_id, d_id, pop, opp, r, f, alpha = 1){
 ```
 
 Example from reference:
+
 ```{r}
 # the example below is based on Soukhov et al. (2023) paper
 travel_matrix <- data.table::data.table(
@@ -78,7 +78,8 @@ land_use_data <- data.table::data.table(
 
 ```{r}
 my_exp <- function(x) {
-  weights <- dexp(x, rate = 0.1) %>% scales::rescale()
+  # Do not rescale
+  weights <- dexp(x, rate = 0.1)# %>% scales::rescale()
   return(weights)
 }
 
@@ -93,6 +94,18 @@ df <- spatial_availability(
 df
 ```
 
-- han-type accessibility (S_i)... I'm not sure, are we right or is the package? Let's check together!
-- shen-type accessibility (a_i). The package is right and we are only 2/3 right. This can be confirmed because, each i value multiplied by workers and summed should equal to the total number of opportunities. This occurs for all three imped funcs for the package but only occurs for 2 of the 3 impedance functions for our calculation (just gamma and binary).
-- spatial availability, we are right and the package is wrong? Interestingly, for the package, the results sum up to the total number of opportunities but the individual values are not equal!!
+```{r}
+floating_catchment_area(
+  travel_matrix,
+  land_use_data,
+  opportunity = "jobs",
+  demand = "population",
+  travel_cost = "travel_time",
+  decay_function = my_exp,
+  method = "2sfca")
+```
+
+-   han-type accessibility (S_i)... I'm not sure, are we right or is the package? Let's check together!
+-   shen-type accessibility (a_i). The package is right and we are only 2/3 right. This can be confirmed because, each i value multiplied by workers and summed should equal to the total number of opportunities. This occurs for all three imped funcs for the package but only occurs for 2 of the 3 impedance functions for our calculation (just gamma and binary). **AP: The values match for 2SFCA and for spatial availability *as long as the function is not rescaled*.**
+-   spatial availability, we are right and the package is wrong? Interestingly, for the package, the results sum up to the total number of opportunities but the individual values are not equal!! **AP: This is because the allocation is still proportional but the impedance function was not the same: rescaling the function changes its shape.**
+
