@@ -78,68 +78,6 @@ sp_avail_detailed <- function(x, o_id, d_id, pop, opp, r, f, alpha = 1){
 }
 ```
 
-```{r}
-spatial_availability_2 <- function (travel_matrix, land_use_data, opportunity, travel_cost, 
-    demand, decay_function, alpha = 1, group_by = character(0), 
-    fill_missing_ids = TRUE) 
-{
-    checkmate::assert_string(opportunity)
-    checkmate::assert_string(travel_cost)
-    checkmate::assert_string(demand)
-    checkmate::assert_number(alpha, lower = 0, finite = TRUE)
-    checkmate::assert_logical(fill_missing_ids, len = 1, any.missing = FALSE)
-    #accessibility::assert_decay_function(decay_function)
-    #accessibility::assert_group_by(group_by)
-    #accessibility::assert_travel_matrix(travel_matrix, travel_cost, group_by)
-    #accessibility::assert_land_use_data(land_use_data, opportunity, demand)
-    if (!inherits(travel_matrix, "data.table")) {
-        original_class <- class(travel_matrix)
-        data <- data.table::as.data.table(travel_matrix)
-    }
-    else {
-        data <- data.table::copy(travel_matrix)
-    }
-    if (!inherits(land_use_data, "data.table")) {
-        land_use_data <- data.table::as.data.table(land_use_data)
-    }
-    merge_by_reference(data, land_use_data, opportunity, active = TRUE)
-    merge_by_reference(data, land_use_data, demand, active = FALSE)
-    groups <- c("from_id", group_by)
-    warn_extra_cols(travel_matrix, travel_cost, group_id = "from_id", 
-        groups = groups)
-    .demand_colname <- demand
-    total_demand <- sum(land_use_data[[.demand_colname]]^alpha)
-    data[, `:=`(demand_bal_fac, (get(.demand_colname)^alpha)/total_demand)]
-    .cost_colname <- travel_cost
-    data[, `:=`(opp_weight, decay_function(get(.cost_colname)))]
-    data[, `:=`(impedance_bal_fac, opp_weight/sum(opp_weight)),
-         #by = c("from_id", group_by)] 
-         by = c("to_id", group_by)]
-    data[, `:=`(combined_bal_fac, demand_bal_fac * impedance_bal_fac/sum(demand_bal_fac * 
-        impedance_bal_fac)), by = c("to_id", group_by)]
-    .opportunity_colname <- opportunity
-    data[, `:=`(spatial_availability, combined_bal_fac * get(.opportunity_colname)), 
-        by = c("to_id", group_by)]
-    access <- data[, .(access = sum(spatial_availability)), by = c("from_id", 
-        group_by)]
-    if (fill_missing_ids) {
-        unique_values <- lapply(groups, function(x) unique(travel_matrix[[x]]))
-        names(unique_values) <- groups
-        possible_combinations <- do.call(data.table::CJ, unique_values)
-        if (nrow(access) < nrow(possible_combinations)) {
-            access <- do_fill_missing_ids(access, possible_combinations, 
-                groups)
-        }
-    }
-    data.table::setnames(access, c("from_id", "access"), c("id", 
-        opportunity))
-    if (exists("original_class")) 
-        class(access) <- original_class
-    return(access)
-}
-```
-
-
 ```{r import-data}
 ggh_pd <- TTS2016R::ggh_pd
 ggh_pd <- st_buffer(ggh_pd, dist=0)
@@ -149,63 +87,11 @@ ggh_taz <-  st_join(ggh_taz, ggh_pd |> transmute(PD),left = TRUE, largest = TRUE
 
 # drop travel times that have destinations
 od  <- TTS2016R::od |> filter( !is.na(travel_time)) |> 
-  #mutate(travel_time = ifelse(travel_time == 0, NA, travel_time)) |> # THIS MUST BE ADDED IN!!!
   mutate(travel_time = as.integer(ifelse(Destination == 9998 | Destination == 8888 | Origin == 9998 | Origin == 8888 
                                          | Destination >= 9000 | Origin >= 9000, NA, travel_time)))
 
 od <- od |> 
   na.omit() #omitting rows with NA travel times - these are trips that happen to outside and/or unknown destinations. 
-```
-
-```{r intra-zonal-travel-time-est-0, include=FALSE, eval = FALSE}
-#lets assign intrazonal trip travel times to be anywhere from 1 min to the 25th percentile (of the planning region, there are 147 in the GGH). The travel time assignment will be linearly weighted by the percentile rank of their TAZ area within the planning region. There are 4137 OD pairs that are intrazonal (i.e., have an NA travel_time), of the total 103,076 this is not a lot but for completeness, lets do it!
-# od <- od |> 
-#   merge(ggh_taz |> 
-#           st_drop_geometry() |> 
-#           transmute(GTA06,PD, AREA), 
-#         by.x = "Origin", by.y="GTA06")
-# 
-# area_adj_tt_list <- od |> 
-#   group_by(PD) |> 
-#   summarise(Origin,
-#             Destination,
-#             AREA,
-#             perc_AREA = rank(AREA)/length(AREA),  #the percentile rank of the area, i.e., the largest area TAZ is close to 1 and the median area TAZ is 0.5 and the lowest size TAZ is close to 0
-#             q25_tt = quantile(travel_time, 0.25, na.rm = T) |> as.numeric(),
-#             travel_time_adj =  perc_AREA*(q25_tt),
-#             .groups = "drop")
-# 
-# area_adj_tt_list <- area_adj_tt_list |> mutate(travel_time_adj = ifelse(travel_time_adj <= 1, 1, travel_time_adj)) |>  
-#   #make sure no travel times are less than 1 minute 
-#   rename(AREA.x = AREA,
-#          PD.x = PD)
-# 
-# # Checking if the 25th percentile travel time for each PD is the same as the original OD -> this is to ensure that 'q25_tt" is correct. For ex. PD 3 has a 1st Qu. tt of 12, and the 'list' also has this same value. The 'perc_AREA' col. also has has a range between close to 0 and close to 1, this is what we expect! So the group_by() operation above did what we wanted.
-# od |> filter(PD == 3) |> select(travel_time) |> summary()
-# area_adj_tt_list |> filter(PD.x == 3) |> select(q25_tt) |> summary()
-# area_adj_tt_list |> filter(PD.x == 3) |> select(perc_AREA) |> summary()
-# 
-# # merge this adj col. to the original od list, and fill in all NA travel times with these newly generated ones.
-# od <- od |> 
-#   merge(area_adj_tt_list |> 
-#           select(Origin, 
-#                  Destination, 
-#                  PD.x, 
-#                  travel_time_adj, 
-#                  AREA.x), 
-#         by=c("Origin", "Destination")) 
-# 
-# #check to make sure the AREA and PD are identical -- good they are, they match up to the original OD number of 99,190 
-# sum(od$PD.x == od$PD)
-# sum(od$AREA.x == od$AREA)
-# 
-# # we can now drop these PD.x and AREA.x col. since we determined they are duplicats.
-# od <- od |> 
-#   select(-c("PD.x", "AREA.x"))
-# 
-# # we should also now create a new travel_time_adj col. where the NA are filled in with our calculated intrazonal tts and the inter-zonal tt remain.
-# od <- od |> 
-#   mutate(travel_time_coale = coalesce(travel_time, travel_time_adj))
 ```
 
 
@@ -419,38 +305,17 @@ od$Persons |> sum()
 ```
 
 ```{r plot-impedance-functions, echo=FALSE}
-#travel_costs <- unique(od$travel_time_coale)
 travel_costs <- 0:max(od$travel_time)
 
-# Anastasia's original parameters
 # AP: the gamma_bin, that is the threshold for the binary function, by allowing zeros implies that some destinations _cannot be reached_; this is the reason why the sum of workers later on does not add to the total number of jobs
-# gamma_bin = 20
-# rate_exp = 0.05560581
-# rate_gamma = 0.08911374
-# shape_gamma = 1.60289258
 
 # Try a much bigger threshold for the binary function; doing this makes the sum of workers to approach the total number of jobs: some jobs are beyond the reach of _every_ potential worker
 gamma_bin = 125
-rate_exp = 0.05
+rate_exp = 0.05560581
 rate_gamma = 0.08911374
 shape_gamma = 1.60289258
 
-#AP: Note that rescaling the functions changes the shape of the curves!
-
-# fit_binary <- data.frame(f = ifelse(travel_costs > 20, 0, 1) , #already scaled from 1 to 0 
-#                          x = travel_costs,
-#                          type = "Binary") 
-# fit_dexp <- data.frame(f = dexp(travel_costs, rate = 0.05560581) |> scales::rescale(),
-#                        x = travel_costs,
-#                        type = "Exp")
-# fit_dgamma <- data.frame(f = dgamma(travel_costs, shape = 1.60289258, rate = 0.08911374) |> scales::rescale(),
-#                          x = travel_costs,
-#                          type = "Gamma")
-# 
-# TLDs <- rbind(fit_binary, fit_dexp, fit_dgamma)
-# 
-# TLDs |> head()
-
+#AP: Note that rescaling the functions changes the shape of the curves! So we will not be rescaling. 
 impedance_functions <- data.frame(x = travel_costs) |>
   mutate(binary = ifelse(travel_costs > gamma_bin, 0, 1),
          exp = dexp(travel_costs, rate = rate_exp),
@@ -474,26 +339,7 @@ od <- od |>
   mutate(f_bin = ifelse(travel_time > gamma_bin, 0, 1),
          f_exp = dexp(travel_time, rate = rate_exp),
          f_gamma = dgamma(travel_time, shape = shape_gamma, rate = rate_gamma),
-         f_gamma = ifelse(f_gamma == 0, 0.00000000000000000001, f_gamma))
-
-
-# od <- TLDs |> filter(type =="Exp") |> 
-#   select(-c("type")) |> 
-#   merge(od, by.x="x", by.y="travel_time_coale") |>
-#   rename(travel_time_coale = x, f_exp = f)
-# 
-# od <- TLDs |> filter(type =="Gamma") |> 
-#   select(-c("type")) |> 
-#   merge(od, by.x="x", by.y="travel_time_coale") |> 
-#   rename(travel_time_coale = x, f_gamma = f)
-# 
-# od <- TLDs |> filter(type =="Binary") |> 
-#   select(-c("type")) |> 
-#   merge(od, by.x="x", by.y="travel_time_coale") |> 
-#   rename(travel_time_coale = x, f_bin = f)
-
-#I checked this 'test' object - the travel times and assocaited f_, copied over correctly. 
-# test <- od |> select(c("travel_time_coale", "f_bin", "f_gamma", "f_exp")) 
+         f_gamma = ifelse(f_gamma == 0, 0.00000000000000000001, f_gamma)) #AS: we need to deal with zeros.. causes some NaN as a result of Inf values. For now, let's set 0s to be very small numbers.
 ```
 
 ```{r unconstrained-access-calculations, echo=FALSE, warning=FALSE}
@@ -538,11 +384,7 @@ V_ij_bin <- od |>
 
 V_i_bin <- V_ij_bin |>
   group_by(Origin) |>
-  summarise(V_i_bin = sum(V_ij))#,
-# V_i_bin_BF = mean(f_t),
-# V_i_bin_sum_pa = sum(sum_pa),
-# V_i_bin_f_p = sum(f_p),
-# V_i_bin_f_c = sum(f_c))  # the proportion of jobs that the origin gets allocated based on all the destinations that origin can access + the competition
+  summarise(V_i_bin = sum(V_ij))
 
 # Spatial availability disaggregated - exponential
 V_ij_exp <- od |> #mutate(f_exp = ifelse(f_exp == 0, 0.00000000000000000001, f_exp)) |> 
@@ -557,11 +399,7 @@ V_ij_exp <- od |> #mutate(f_exp = ifelse(f_exp == 0, 0.00000000000000000001, f_e
 
 V_i_exp <- V_ij_exp |>
   group_by(Origin) |>
-  summarise(V_i_exp = sum(V_ij)) |> #,
-  # V_i_exp_BF = mean(f_t),
-  # V_i_exp_sum_pa = sum(sum_pa),
-  # V_i_exp_f_p = sum(f_p),
-  # V_i_exp_f_c = sum(f_c))
+  summarise(V_i_exp = sum(V_ij)) |> 
   select(-Origin)
 
 # Spatial availability disaggregated - gamma
@@ -577,11 +415,7 @@ V_ij_gamma <- od |> #mutate(f_gamma = ifelse(f_gamma == 0, 0.0000000000000000000
 
 V_i_gamma <- V_ij_gamma |>
   group_by(Origin) |>
-  summarise(V_i_gamma = sum(V_ij)) |>#,
-  # V_i_gamma_BF = mean(f_t),
-  # V_i_gamma_sum_pa = sum(sum_pa),
-  # V_i_gamma_f_p = sum(f_p),
-  # V_i_gamma_f_c = sum(f_c)) 
+  summarise(V_i_gamma = sum(V_ij)) |>
   select(-Origin)
 
 V <- cbind(V_i_bin, V_i_exp, V_i_gamma)
@@ -819,32 +653,10 @@ test <- merge(V,
 #so we have a problem... the exp produced does not match the spatial_avail_detailed() output. This is troubling...
 test |> select(c(V_i_exp, V_i_exp_pkg)) |> head()
 ```
-
-```{r}
-#let's try to manually investigate my calculated values and see if my formula is correct. let's inspect origin 1019, my function says V_ij_gamma is 2.647246 The accessibility function says 130.68
-
-# as you can see, they both some to the correct total - extraordinary! This is the same for all exp, bin, and gamma.
-test$V_i_gamma |> sum(na.rm=T)
-test$V_i_gamma_pkg |> sum(na.rm=T)
-
-#because we keep the intermediates, we can check the sums of the balancing factors. The origin 1019 only has trips to 3 destinations - ids 1052, 2216, and 57. For one of the destinations, 1052, we can see the balancing factors (and the total factor - f_t) sums to 1. 
-
-test1 <- od |> filter(Destination %in% c("2116","57","1052")) |> select(Origin) |> as.vector() |> rename(ids = "Origin")
-test2 <- od |> filter(Origin %in% c("1019")) |> select(Destination) |> as.vector() |> rename(ids = "Destination")
-list_test1 <- rbind(test1, test2)
-list_test1 <- list_test1$ids
-
-V_ij_gamma |> filter(Destination == "1052") |> select(f_c) |> sum()
-V_ij_gamma |> filter(Destination %in% test1$ids) |> select(f_p) |> sum() # I THINK this should sum to 1.. let's figure this out. I don't know ah!!
-V_ij_gamma |> filter(Destination == "1052") |> select(f_t) |> sum()
-```
-<!-- END OF PROBLEMATIC CODE -->
-
-<!-- AFTER THIS THE RESULTS OF ANASTASIA'S CODE AND THE RESULTS OF PACKAGE {accessibility} MATCH -->
+<!-- END OF PROBLEMATIC CODE --> <!-- AFTER THIS THE RESULTS OF ANASTASIA'S CODE AND THE RESULTS OF PACKAGE {accessibility} MATCH -->
 
 ```{r testing-using-accessibilitypackage-3, echo=FALSE, warning=FALSE}
 #Now let's test shen-type acessibiilty, 2sfca! 
-
 constrained_bin_a <- floating_catchment_area(
   travel_matrix = od_short,
   land_use_data = taz_short,
