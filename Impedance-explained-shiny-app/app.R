@@ -18,10 +18,10 @@ ui <- shinyUI(pageWithSidebar(
   sidebarPanel(
     selectizeInput("typefunc",
                    "Displayed distance decay function(s):",
-                   choices = c("Binary", 
+                   choices = c("Uniform", 
                                "Gamma",
                                "Exponetial"),
-                   selected = c("Binary"),
+                   selected = c("Uniform"),
                    multiple = TRUE),
     sliderInput("tcrange", 
                 label = "Travel cost range:", 
@@ -29,11 +29,11 @@ ui <- shinyUI(pageWithSidebar(
                 max = 120,
                 value = c(1,60),
                 step=1),
-    sliderInput("thres",
-                "Threshold (binary):",
+    sliderInput("thres1_2",
+                "Thresholds (uniform):",
                 min=0,
                 max=120,
-                value=15,
+                value=c(0,45),
                 step=1),
     sliderInput("rate1",
                 "Rate parameter (exponential):",
@@ -61,7 +61,7 @@ ui <- shinyUI(pageWithSidebar(
     tabsetPanel(
       tabPanel("Exploring impedance functions",
                plotOutput("Plot_prob_dens"),
-               h6("*Exponential and gamma probabiltiy density functions are rescaled such that the impedance function values range from 0 to 1")
+               h6("*  ")
       )  
     )
   )
@@ -76,7 +76,6 @@ server <- function(input,output){
   
   rand_samp <- reactive({
     seq(input$tcrange[1], input$tcrange[2], 0.25)
-    # rgamma((input$tcrange[2]-input$tcrange[1])/1,input$shape, input$scale)
   })
   
   min_quan <- reactive({
@@ -91,16 +90,16 @@ server <- function(input,output){
     seq(min_quan(), max_quan(), 0.01) 
   })
   
-  prob_dens_bin <- reactive({
-    ifelse(quans() >= input$thres, 0, 1) 
+  prob_dens_uni <- reactive({
+    dunif(quans(), input$thres1_2[1], input$thres1_2[2]) 
   })
   
   prob_dens_exp <- reactive({
-    dexp(quans(), input$rate1) |> scales::rescale()
+    dexp(quans(), input$rate1) 
   })
   
   prob_dens_gamma <- reactive({
-    dgamma(quans(), input$shape2, input$scale2) |> scales::rescale()
+    dgamma(quans(), input$shape2, input$scale2)
   })
   
   
@@ -110,9 +109,9 @@ server <- function(input,output){
   
   # Plot the probability density
   output$Plot_prob_dens <-renderPlot({
-    fit_bin <- data.frame(f = prob_dens_bin(),
+    fit_uni <- data.frame(f = prob_dens_uni(),
                           x = quans(),
-                          type = "Binary")
+                          type = "Uniform")
     fit_dexp <- data.frame(f = prob_dens_exp(),
                            x = quans(),
                            type = "Exponetial")
@@ -120,7 +119,7 @@ server <- function(input,output){
                              x = quans(),
                              type = "Gamma")
 
-    plot.data <- rbind(fit_bin,fit_dexp,fit_dgamma)
+    plot.data <- rbind(fit_uni,fit_dexp,fit_dgamma)
     plot.data <- plot.data[plot.data$type %in% input$typefunc, ]
     
     ggplot(plot.data) + 
