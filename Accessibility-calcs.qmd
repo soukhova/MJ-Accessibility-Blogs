@@ -1,6 +1,8 @@
 ---
 title: "Planning with accessibility measures: unconstrained and constrained accessibility"
-format: html
+format: 
+  docx: default
+  html: default
 editor: source
 author:
   - name: Anastasia Soukhov
@@ -8,7 +10,6 @@ author:
     affiliation: School of Earth, Environment and Society, McMaster University, Hamilton, ON, L8S 4K1, Canada
 bibliography: bibliography.bib
 ---
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ```
@@ -24,7 +25,6 @@ library(tmap) # Thematic Maps
 #library(tidyverse) # Easily Install and Load the 'Tidyverse'
 library(TTS2016R) # An augmented 2016 Transportation Tomorrow Survey (TTS) data package: worker and place of employment counts, trips and estimated travel time to work in the Greater Golden Horsehoe area, Canada
 ```
-
 ```{r spatial-avail-function, echo=FALSE}
 sp_avail_detailed <- function(x, o_id, d_id, pop, opp, r, f, alpha = 1){
   
@@ -91,9 +91,8 @@ od  <- TTS2016R::od |> filter( !is.na(travel_time)) |>
                                          | Destination >= 9000 | Origin >= 9000, NA, travel_time)))
 
 od <- od |> 
-  na.omit() #omitting rows with NA travel times - these are trips that happen to outside and/or unknown destinations. 
+  na.omit() #omitting rows with NA travel times - these are trips that happen to outside and/or unknown destinations.
 ```
-
 
 ```{r intra-zonal-travel-time-est-1, include=FALSE}
 # Imputing intra-zonal travel time. The proposed procedure is as follows:
@@ -117,21 +116,13 @@ taz_dist <- cbind(expand.grid(Destination = taz_centroids$GTA06,
                   taz_dist) |>
   select(Origin, Destination, taz_dist)
 
-# Sanity check: make sure that the distances were assigned correctly to origin-destination pairs
-st_distance(taz_centroids |> filter(GTA06 == "1"), 
-            taz_centroids |> filter(GTA06 == "100"))
-
 # Join the intra-zonal distances to the od table
 od <- od |>
   left_join(taz_dist,
             by = c("Origin", "Destination"))
-
-# Sanity check: make sure that the distances were assigned correctly to origin-destination pairs
-st_distance(taz_centroids |> filter(GTA06 == "1"), 
-            taz_centroids |> filter(GTA06 == "21"))
 ```
 
-```{r intra-zonal-travel-time-est-2 echo=FALSE}
+```{r intra-zonal-travel-time-est-2, echo=FALSE}
 # Join area of zone
 od <- od |> 
   left_join(ggh_taz |> 
@@ -144,9 +135,6 @@ od <- od |>
 # Calculate the square root of the area of all zones; this is a proxy of the intra-zonal distance; note that the area is in sq.km so convert to meters. The inter-zonal distances are in m.
 od <- od |>
   mutate(sqrt_area = ifelse(Origin == Destination, sqrt(AREA * 1000000), NA))
-
-# Check the summary statistics of the sqrt of AREA to find the maximum distance that we wish to model
-# summary(od$sqrt_area)
 ```
 
 ```{r intra-zonal-travel-time-est-3, include=FALSE}
@@ -155,16 +143,6 @@ zonal_time_mod <- lm(travel_time ~ taz_dist,
                      data = od |>
                        filter(Origin != Destination,
                               taz_dist < 24000))
-
-ggplot(data = od |>
-         filter(Origin != Destination,
-                taz_dist < 24000),
-       aes(x = taz_dist,
-           y = travel_time)) +
-  geom_point(alpha = 0.2) +
-  geom_abline(intercept = zonal_time_mod$coefficients[1], 
-              slope = zonal_time_mod$coefficients[2],
-              color = "red")
 ```
 
 ```{r intra-zonal-travel-time-est-4, include=FALSE}
@@ -176,69 +154,7 @@ od <- od |>
                               # Else use the travel time already in the table
                               travel_time))
 ```
-
-*This blog post is the second part of a multi-part series. This series aims to walk readers through the potential uses of accessibility measure in transportation equity planning. This post explores different accessibility measures and how impedance function selection impacts results. Read the first part for an introduction to what is accessibility and defining impedance functions. In a subsequent post(s), accessibility methods to conceptualize and analysis equity will be explored.*
-
-In *"Unifying accessibility"*, a journal article by [@wuUnifyingAccess2020], a unifying feature between many of the accessibility measures reviewed in the literature is clarified: all accessibility measures use some form of travel impedance and reachable opportunities evaluations.
-Depending on the type of accessibility measure, how they quantify and conceptualize travel cost varies.
-
-In this post, we deviate from [@wuUnifyingAccess2020] definitions - and distinguish between two types of accessibility measure conceptualizations: *unconstrained* and *constrained* measures.
-We believe this distinction is important to help us, those interested in advocating for, planning and researching transportation, interpret outputs.
-This interpretation can allow us to quantify *how much* access to opportunities should be increased by and better formulate equity targets.
-
-First, **unconstrained** accessibility. The general form of the unconstrained measure is represented as $S_i$, and is the measure proposed by [@Hansen1959]. This measure is from which many accessibility measures are derived and continue to derive from to this day. $S_i$ is an accessibility value that is calculated for each spatial unit. This value is the summation of all the $O_j$ available (i.e., reachable) at each spatial unit according to some impedance function $f(c_{ij})$. $S_i$ is defined as follows:
-
-$$
-S_i = \sum_{j=1}^JO_j \cdot f(c_{ij})
-$$
-
-\noindent Where for both unconstrained ($S_i$) and constrained measure ($V_i$):
-
--   $c_{ij}$ is a measure of the cost of moving between $i$ and $j$.
--   $f(\cdot)$ is an impedance function of $c_{ij}$; it can take the form of any monotonically decreasing function chosen based on positive or normative criteria [@paez2012measuring].
--   $i$ is a set of origin locations ($i = 1,\cdots,N$).
--   $j$ is a set of destination locations ($j = 1,\cdots,J$).
--   $O_j$ is the number of opportunities at location $j$; $O = \sum_{j=1}^J O_j$ is the total supply of opportunities in the study region.
-
-Many variations of $S_i$ have been proposed - but largely they focus on tweaks to the $f(c_{ij})$ operationalized. This measure fundamentally counts $O_j$ (after being weighted by $f(c_{ij})$) for each $i$. This means that the score that is assigned to each $i$ is the summation of all the opportunities that can be *potentially* interacted with. However, counting all opportunities that can be potential interaction may not make sense for certain times of opportunities.
-
-As a hypothetical example, I can live in a part of the city where I have relatively exceptional accessibility to job opportunities as a result of land-use and transit options. Say this accessibility is a value of "100,000 potential job opportunities". However, imagine if my neighbourhood and adjacent neighbourhoods have 150,000 people who can also reach those same 100,000 job opportunities. Though I can potentially interact with a *relatively* high accessibility value of 100,000 opportunities, I may have less *available* opportunities as a result of *relatively* high neighbouring demand for opportunities. When compared to other areas of the city with *relatively* lower accessibility values but with a similar level of job opportunities and population demand, those areas in the city may have more potential spatial *availability* than my neighbourhood.
-
-This is the concept of *competition*, and has been applied to the *unconstrained* accessibility measure within the influential works of @shen1998 and @weibull_axiomatic_1976, as well as the widely used in the two-step floating catchment approach (2SFCA) approach of @luo2003.
-These works can be thought to adjust $S_i$ (unconstrained accessibility) to account for the population's demand for opportunities in the region of interest.
-
-In the recently published "*Introducing spatial availability: a singly-constrained measure of competitive accessibility*" journal article by [@soukhovIntroducingSpatialAvailability2023], we propose an alternative derivation of @shen1998 accessibility with competition that explicitly clarifies an inconsistency in its formulation. We also conceptualize this measure as competitive accessibility that is *singly constrained* (akin to singly-constrained spatial interaction models (**LINK?**)).
-
-In other words, the total number of opportunities in the study region are preserved i.e. if a city has 1,000,000 opportunities a proportion of those opportunities are allocated to each spatial units in the region such that all the spatial availability scores sum up to equal 1,000,000. Spatial availability $V_i$ and its mathematical formulation is defined as follows:
-
-```{=tex}
-\begin{equation}
-\label{eq:SA-and-balancing-factors}
-V_i = \sum_{j=1}^NO_jF^t_{ij} \\
-\text{Where: } F^t_{ij} = \frac{F^p_{i} \cdot F^c_{ij}}{\sum_{i=1}^N F^p_{i} \cdot F^c_{ij}}
-\end{equation}
-```
-\noindent Where $V_i$ contains all the parameters from *unconstrained* accessibility measure in addition to:
-
--   $F^t_{ij}$ is a balancing factor defined the population balancing factor ($F^p_{i} = \frac{P_{i}^\alpha}{\sum_{i=1}^N P_{i}^\alpha}$) and travel impedance balancing factor ($F^c_{ij} = \frac{f(c_{ij})}{\sum_{i=1}^N f(c_{ij})}$)
-
-It should be understood that both measures are a weighted sum of opportunities. $S_i$ is the sum of all opportunities that can be potentially interacted with (i.e., *unconstrained* summation) while $V_i$ allocates opportunities through the balancing factors in a *constrained* way.
-
-In $V_i$, the balancing factor $F^p_{i}$ corresponds to the proportion of the population in origin $i$ relative to the population in the region. On the right hand side of the equation, the numerator $P_{i}^\alpha$ is the population at origin $i$. The summation in the denominator is over $i=1,\cdots,N$, and adds up to the total population of the region. Notice that we incorporate an empirical parameter $\alpha$. The role of $\alpha$ is to modulate the effect of demand by population. When $\alpha <1$, opportunities are allocated more rapidly to smaller centers relative to larger ones; $\alpha>1$ achieves the opposite effect.
-
-$F^c_{ij}$, the impedance balancing factor, uses the impedance function to proportionally allocate more jobs to closer population centers, that is, to those with populations *more willing to reach the jobs*. Indeed, $F^c_{ij}$ can be thought of as the proportion of the population at $i$ willing to travel to destination $j$, conditional on the travel behavior as given by the impedance function.
-
-Overall, these two measures can be complex to understand - but the outputs may demonstrate their intuition more clearly! In what follows, we calculate and visualize the *unconstrained* and *constrained* accessibility measures defined. We use all three impedance functions (as defined in the previous post **link**) as inputs in both measures.
-
-# Differences in accessibility results
-
-Consider home-to-work travel. These trips are made by employed people from home to their place of employment. Each person in the empirical data set has a job and a location for that job. Living in an area with a higher accessibility to jobs value means that you have more opportunities to potentially interact with jobs ( *unconstrained* measure) or that you have more spatially available opportunities to potentially interact with ( *constrained* measure). Both measures weight opportunities based on travel impedance and spatial availability is further proportionally weighted by the population (i.e., neighbouring demand) balancing factor.
-
-For the purpose of this demonstration, accessibility is calculated using data taken from the R data package {TTS0216R} and the home-to-work flows are provided at the spatial unit of traffic analysis zones (TAZ). {TTS0216R} contains a subset of home-to-work flows from the 2016 Transportation Tomorrow Survey (TTS) as well as calculated road-network car travel times (calculated using {r5r}). {TTS2016R} is detailed in this publication [@soukhovTTS2016RDataSet2023] and is freely available to be explored here (<https://soukhova.github.io/TTS2016R/>).
-
-The plots of the impedance functions used for the accessibility calculations are plotted from left to right: uniform (threshold $T$ of 45 minutes), exponential (rate =XX), gamma (rate =XX , shape =XX). The data set and parameters were fit and discussed in the first blog post (**URL link**).
-
-```{r}
+```{r adding-workers-and-jobs-to-land-use, include=FALSE}
 workers <- od |> 
   group_by(Origin) |> 
   summarize(workers = sum(Persons))
@@ -275,74 +191,497 @@ ggh_taz$jobs |> sum(na.rm=T)
 od$Persons |> sum() 
 ```
 
-```{r plot-impedance-functions, echo=FALSE}
-travel_costs <- 0:max(od$travel_time)
+```{r select-hamilton-origins, include=FALSE}
+#keeping only trips originating from Hamilton IDs (the planning district of Hamilton)
+ham_o_ids <- ggh_taz |> filter(PD == 46) |> data.frame() |> transmute(GTA06, AREA) #list of hamilton IDs
+od_HAM_origin <- od |> filter(Origin %in% ham_o_ids$GTA06) #only keeping od trips that originate within Hamilton
 
-# AP: the gamma_bin, that is the threshold for the binary function, by allowing zeros implies that some destinations _cannot be reached_; this is the reason why the sum of workers later on does not add to the total number of jobs
+od_HAM_origin$Persons |> sum() #104040 workers traveling from Hamilton origin IDs
 
-# Try a much bigger threshold for the binary function; doing this makes the sum of workers to approach the total number of jobs: some jobs are beyond the reach of _every_ potential worker
-gamma_bin = 125
-rate_exp = 0.05560581
-rate_gamma = 0.08911374
-shape_gamma = 1.60289258
-
-#AP: Note that rescaling the functions changes the shape of the curves! So we will not be rescaling. 
-impedance_functions <- data.frame(x = travel_costs) |>
-  mutate(binary = ifelse(travel_costs > gamma_bin, 0, 1),
-         exp = dexp(travel_costs, rate = rate_exp),
-         gamma = dgamma(travel_costs, shape = shape_gamma, rate = rate_gamma)) |>
-  pivot_longer(cols = -x,
-               names_to = "f",
-               values_to = "val")
-
-ggplot(data = impedance_functions,
-       aes(x = x, y = val)) +
-  geom_line() +
-  facet_wrap(~ f,
-             nrow = 1,
-             scales = "free")
-
+ggh_taz_ham_plus <- ggh_taz |> filter(GTA06 %in% od_HAM_origin$Origin | GTA06 %in% od_HAM_origin$Destination) 
 ```
 
-```{r preparing-impedance-values, echo=FALSE, warning=FALSE}
-# calc impedance value using the same formulas used for the plot above.
-od <- od |>
-  mutate(f_bin = ifelse(travel_time > gamma_bin, 0, 1),
-         f_exp = dexp(travel_time, rate = rate_exp),
-         f_gamma = dgamma(travel_time, shape = shape_gamma, rate = rate_gamma),
-         f_gamma = ifelse(f_gamma == 0, 0.00000000000000000001, f_gamma)) #AS: we need to deal with zeros.. causes some NaN as a result of Inf values. For now, let's set 0s to be very small numbers.
+```{r updating-hamilton-origins, include=FALSE}
+workers <- od_HAM_origin |> 
+  group_by(Origin) |> 
+  summarize(workers = sum(Persons))
+
+jobs <- od_HAM_origin |> 
+  group_by(Destination) |> 
+  summarize(jobs = sum(Persons))
+
+od_HAM_origin <- od_HAM_origin %>% select(-c("workers", "jobs"))
+
+od_HAM_origin <- merge(od_HAM_origin, 
+            workers, 
+            by="Origin")
+od_HAM_origin <- merge(od_HAM_origin, 
+            jobs, 
+            by="Destination")
+
+#update the workers and jobs in the ggh_taz file.
+ggh_taz_ham_plus <- ggh_taz_ham_plus |> 
+  select(-c("workers", "jobs"))
+ggh_taz_ham_plus <- ggh_taz_ham_plus |> 
+  merge(workers, 
+        by.x = "GTA06",
+        by.y="Origin",
+        all = T)
+ggh_taz_ham_plus <- ggh_taz_ham_plus |> 
+  merge(jobs, 
+        by.x = "GTA06", 
+        by.y = "Destination", 
+        all=T)
+
+ggh_taz_ham_plus$workers |> sum(na.rm=T)
+ggh_taz_ham_plus$jobs |> sum(na.rm=T)
+
+#make sure that the above two lines yield the same number.. this is the number of people who make trips from origin (Hamilton Center) to jobs anywhere in the GGH (104,040 people)
+od_HAM_origin$Persons |> sum() 
 ```
 
-```{r unconstrained-access-calculations, echo=FALSE, warning=FALSE}
-# Accessibility - Level of service 
-LOS_j <- od |>
+```{r creating-TLD}
+#creating 1 row for each OD trip (i.e., Persons = frequency)
+all_tt <- od_HAM_origin  |> dplyr::select(Persons, travel_time)
+all_tt <- all_tt[rep(seq_len(dim(all_tt)[1]), all_tt$Persons), 2]
+```
+
+```{r testing-different-impedance-models, echo=FALSE, warning=FALSE, message=FALSE}
+unif_ <- fitdistrplus::fitdist(data=all_tt, "unif", method="mme", optim.method="Nelder-Mead")
+gamma_ <- fitdistrplus::fitdist(data=all_tt, "gamma", method="mme", optim.method="Nelder-Mead")
+exp_ <- fitdistrplus::fitdist(data=all_tt, "exp", method="mme", optim.method="Nelder-Mead")
+```
+
+*This blog post is the second part of a multi-part series. This series aims to walk readers through the potential uses of accessibility measures in transportation equity planning. This post explores different accessibility measures and how impedance function selection impacts results. Read the first post (**LINK TO POST1**) for an introduction to what is accessibility and defining impedance functions. In a subsequent posts, accessibility methods to conceptualize and analysis equity will be explored.*
+
+<!-- In *"Unifying accessibility"*, a journal article by [@wuUnifyingAccess2020], a unifying feature between many of the accessibility measures used in the literature is clarified: all accessibility measures use some form of travel impedance and reachable opportunities evaluation. We deviate from [@wuUnifyingAccess2020] definitions.. -->
+
+*Accessibility* (or *access*) has many definitions. Within the context of transportation planning, accessibility can be defined as a measure of the amount of interaction a population potentially has with opportunities in a given region. It is a product of the land-use and the population's means of transportation: the population are the people that live within the region and the opportunities are the destinations of interest to the population or of the transportation network itself. 
+
+In this post, we distinguish between two types of accessibility measure conceptualizations: *unconstrained* and *constrained* measures. This distinction is important to help those interested in advocating for, planning and researching transportation, interpret outputs. This interpretation can allow us to quantify *how much* access to opportunities should be increased by and better formulate equity targets.
+
+First, let's detail **unconstrained** accessibility. The general form of the unconstrained measure is represented as $S_i$ and is the measure proposed by [@hansen1959]. This measure is from which many accessibility measures are derived and continue to derive from to this day. $S_i$ is an accessibility value that is calculated for each spatial unit. This value is the summation of all the $O_j$ available (i.e., reachable) at each spatial unit according to some impedance function $f(c_{ij})$. $S_i$ is defined in @eq-hansen-access.
+
+$$
+S_i = \sum_{j=1}^JO_j \cdot f(c_{ij})
+$${#eq-hansen-access}
+
+\noindent Where for both unconstrained ($S_i$) and constrained measure ($V_i$):
+
+-   $c_{ij}$ is a measure of the cost of moving between $i$ and $j$.
+-   $f(\cdot)$ is an impedance function of $c_{ij}$; it can take the form of any monotonically decreasing function chosen based on positive or normative criteria [@paez2012measuring].
+-   $i$ is a set of origin locations ($i = 1,\cdots,N$).
+-   $j$ is a set of destination locations ($j = 1,\cdots,J$).
+-   $O_j$ is the number of opportunities at location $j$; $O = \sum_{j=1}^J O_j$ is the total supply of opportunities in the study region.
+
+Many variations of $S_i$ have been proposed - but largely they focus on tweaks to the $f(c_{ij})$ operationalized. This measure fundamentally counts $O_j$ (after being weighted by $f(c_{ij})$) for each $i$. This means that the score that is assigned to each $i$ is the summation of all the opportunities that can be *potentially* interacted with. However, counting all opportunities of potential interaction may not make sense for certain opportunities.
+
+As a hypothetical example, one can live in a part of the city where one has relatively exceptional accessibility to job opportunities as a result of land-use and transit options. Say this accessibility is a value of "100,000 potential job opportunities". However, imagine if their neighbourhood and their adjacent neighbourhoods have 150,000 people who can also reach those same 100,000 job opportunities. Though they can potentially interact with a *relatively* high accessibility value of 100,000 opportunities, they may have less *available* opportunities as a result of *relatively* high neighbouring demand for opportunities. When compared to other areas of the city with *relatively* lower accessibility values but with a similar level of job opportunities and population demand, those other areas in the city may have more potential spatial *availability* than the neighbourhood where our hypothetical person lives.
+
+This is the concept of *competition*, and has been applied to the *unconstrained* accessibility measure within the influential works of @shen1998 and @weibull_axiomatic_1976, as well as the widely used in the two-step floating catchment approach (2SFCA) approach of @luo2003. These works can be thought to adjust $S_i$ (unconstrained accessibility) to account for the population's demand for opportunities in the region of interest.
+
+In the recently published journal article by [@soukhovIntroducingSpatialAvailability2023], we propose an alternative derivation of @shen1998 accessibility with competition that explicitly clarifies an inconsistency in its formulation. We conceptualize this measure as competitive accessibility that is *singly constrained* (akin to singly-constrained spatial interaction models (**LINK?**)).
+
+In other words, the total number of opportunities in the study region are preserved i.e. if a city has 1,000,000 opportunities a proportion of those opportunities are allocated to each spatial units in the region such that all the spatial availability scores sum up to equal 1,000,000. Spatial availability $V_i$ and its mathematical formulation is defined in @eq-spatial-avail:
+
+$$
+V_i = \sum_{j=1}^NO_jF^t_{ij} \\
+\text{Where: } F^t_{ij} = \frac{F^p_{i} \cdot F^c_{ij}}{\sum_{i=1}^N F^p_{i} \cdot F^c_{ij}}
+$${#eq-spatial-avail}
+
+\noindent Where $V_i$ contains all the parameters from *unconstrained* accessibility measure in addition to:
+
+-   $F^t_{ij}$ is a balancing factor defined the population balancing factor ($F^p_{i} = \frac{P_{i}^\alpha}{\sum_{i=1}^N P_{i}^\alpha}$) and travel impedance balancing factor ($F^c_{ij} = \frac{f(c_{ij})}{\sum_{i=1}^N f(c_{ij})}$)
+
+It should be understood that both measures are a weighted sum of opportunities. $S_i$ is the sum of all opportunities that can be potentially interacted with (i.e., *unconstrained* summation) while $V_i$ allocates opportunities through the balancing factors in a *constrained* way.
+
+In $V_i$, the balancing factor $F^p_{i}$ corresponds to the proportion of the population in origin $i$ relative to the population in the region. On the right hand side of the equation, the numerator $P_{i}^\alpha$ is the population at origin $i$. The summation in the denominator is over $i=1,\cdots,N$, and adds up to the total population of the region. Notice that we incorporate an empirical parameter $\alpha$. The role of $\alpha$ is to modulate the effect of demand by population. When $\alpha <1$, opportunities are allocated more rapidly to smaller centers relative to larger ones; $\alpha>1$ achieves the opposite effect.
+
+$F^c_{ij}$, the impedance balancing factor, uses the impedance function to proportionally allocate more jobs to closer population centers, that is, to those with populations *more willing to reach the jobs*. Indeed, $F^c_{ij}$ can be thought of as the proportion of the population at $i$ willing to travel to destination $j$, conditional on the travel behavior as described by the impedance function.
+
+Overall, these two measures can be complex to understand - but the outputs may demonstrate their intuition more clearly! In what follows, we calculate and visualize the *unconstrained* and *constrained* accessibility measures defined. We use the best-fitting probability distribution functions as impedance functions (defined in the previous post (**LINK TO POST1**)) as inputs in both measures $S_i$ and $V_i$.
+
+# Differences in accessibility results
+
+For the purpose of this demonstration, unconstrained and constrained accessibility is calculated using data taken from the R data package {TTS0216R} and the home-to-work flows are provided at the spatial unit of traffic analysis zones (TAZ). {TTS0216R} contains a subset of home-to-work flows from the 2016 Transportation Tomorrow Survey (TTS) as well as calculated road-network car travel times (calculated using {r5r}). {TTS2016R} is detailed in this publication [@soukhovTTS2016RDataSet2023] and is freely available to be explored [here](https://soukhova.github.io/TTS2016R/). The focus of this demonstration is on an urban planning boundary in Hamilton, Ontario.
+
+The plots of the impedance functions used for both accessibility calculations are plotted in @fig-TLD-all: uniform function (red,  $T_{min}$ and $T_{max}$ is 0 and `r unif_$estimate[2] |> prettyNum(digits=1)` mins), exponential function (green, $\beta$ (rate) is `r exp_$estimate |> prettyNum(digits=1)`), and gamma function (blue, $\alpha$ (shape) is `r gamma_$estimate[1] |> prettyNum(digits=1)` and $\beta$ (rate) is `r gamma_$estimate[2] |> prettyNum(digits=1)`. The data set and parameters were fit and discussed in the first blog post (**LINK TO POST1**).
+
+```{r plotting-impedance-functions}
+#| label: fig-TLD-all
+#| fig-cap: "The fitted theoretical functions of home-to-work trips (in estimated minutes by car) for Hamilton Center."
+
+travel_costs <- unique(od$travel_time)
+
+fit_unif <- data.frame(f = dunif(travel_costs, min=0, max=unif_$estimate[2]), #already scaled from 1 to 0
+                         x = travel_costs,
+                         type = "Uniform")
+fit_dexp <- data.frame(f = dexp(travel_costs, rate = exp_$estimate), #|> scales::rescale(),
+                       x = travel_costs,
+                       type = "Exp")
+fit_dgamma <- data.frame(f = dgamma(travel_costs, shape = gamma_$estimate[1], rate = gamma_$estimate[2]), #|> scales::rescale(),
+                         x = travel_costs,
+                         type = "Gamma")
+
+TLDs <- rbind(fit_unif, fit_dexp, fit_dgamma)
+
+ggplot(data = TLDs) + geom_line(aes(x=x, y=f, color=type), size=0.6) + 
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 88)) +
+  theme_classic() +
+  scale_color_manual(name = "Functions",
+                     values = c("Green", "Blue", "Red")) +
+  xlab(bquote(c[ij])) +
+  ylab(bquote(f(c[ij])))
+```
+
+In the following, we use the {accessibility} package to conveniently calculate unconstrained accessibility $S_i$ (@eq-hansen-access) using the gravity() function, singly-constrained accessibility $V_i$ (@eq-spatial-avail) using the spatial_availability() function and the defined impedance functions shown in the above @fig-TLD-all. We plot the resulting scores for the Hamilton Center area for each impedance function as follows:
+
+```{r testing-using-accessibilitypackage, include=FALSE}
+#Reformatting for input into the accessibility() function. I'm doing this to test the accessibility funciton for how it calculates, unif, exp, and gamma hansen-type accessibility (S_i). 
+#od_short <- od |> transmute(Origin, Destination, travel_time_coale) |>
+
+# Retrieve jobs and workers from the same data table that was used to calculate accessibility above
+# taz_short_workers <- od |>
+#   transmute(id = Origin,
+#             workers) |>
+#   distinct(id, .keep_all = TRUE)
+# 
+# taz_short_jobs <- od |>
+#   transmute(id = Destination,
+#             jobs) |>
+#   distinct(id, .keep_all = TRUE)
+# 
+# taz_short_2 <- taz_short_workers |>
+#   full_join(taz_short_jobs,
+#             by = "id") |>
+#   drop_na()
+
+# Previous version
+od_short <- od_HAM_origin |> 
+  transmute(Origin, 
+            Destination, 
+            travel_time) |>
+  rename("from_id" = Origin ,
+         "to_id" = Destination,
+         "tt" = travel_time)
+
+taz_short <- ggh_taz_ham_plus |> 
+  st_drop_geometry() |> 
+  transmute(GTA06, 
+            workers, 
+            jobs) |>
+  rename("id" = GTA06) |> 
+  mutate(workers = ifelse(is.na(workers), 0, workers),
+         jobs = ifelse(is.na(jobs), 0, jobs))
+
+my_unif <- function(x) {
+  weights <- dunif(x, min=unif_$estimate[1], max=unif_$estimate[2])
+  weights <- ifelse(weights == 0, 0.00000000000000000001, weights)
+  return(weights)
+}
+
+my_exp <- function(x) {
+  weights <- dexp(x, rate = exp_$estimate)
+  # The exponential function never gives zeros
+  # weights <- ifelse(weights == 0, 0.00000000000000000001, weights)
+  return(weights)
+}
+
+my_gamma <- function(x) {
+  weights <- dgamma(x, shape = gamma_$estimate[1], rate = gamma_$estimate[2])
+  weights <- ifelse(weights == 0, 0.00000000000000000001, weights)
+  return(weights)
+}
+
+# calc for package... let's try unconstrained first
+unconstrained_unif <- gravity(
+  travel_matrix = od_short,
+  land_use_data = taz_short,
+  opportunity = "jobs",
+  travel_cost = "tt",
+  decay_function = my_unif) |>   rename("S_i_unif_pkg" = jobs)
+
+unconstrained_exp <- gravity(
+  travel_matrix = od_short,
+  land_use_data = taz_short,
+  opportunity = "jobs",
+  travel_cost = "tt",
+  decay_function = my_exp) |>   rename("S_i_exp_pkg" = jobs)
+
+unconstrained_gamma <- gravity(
+  travel_matrix = od_short,
+  land_use_data = taz_short,
+  opportunity = "jobs",
+  travel_cost = "tt",
+  decay_function = my_gamma)  |> rename("S_i_gamma_pkg" = jobs)
+
+package_S <- merge(unconstrained_unif,unconstrained_exp, by="id", all=T) 
+package_S <- merge(package_S, unconstrained_gamma, by="id", all=T)
+
+# add to taz 
+ggh_taz <- merge(ggh_taz, package_S, by.x=("GTA06"), by.y=("id"), all=TRUE)
+
+unconstrained_unif$S_i_unif_pkg %>% sum(na.rm=T)
+unconstrained_exp$S_i_exp_pkg %>% sum(na.rm=T)
+unconstrained_gamma$S_i_gamma_pkg %>% sum(na.rm=T)
+```
+
+```{r testing-using-accessibilitypackage-2, include=FALSE}
+#just gamma for now... (I also tried unif and exp)
+constrained_unif <- spatial_availability(travel_matrix = od_short,
+                                        land_use_data = taz_short,
+                                        opportunity = "jobs",
+                                        demand = "workers",
+                                        travel_cost = "tt",
+                                        decay_function = my_unif,
+                                        alpha = 1) |> 
+  rename("V_i_unif_pkg" = jobs)
+
+constrained_exp <- spatial_availability(travel_matrix = od_short,
+                                        land_use_data = taz_short,
+                                        opportunity = "jobs",
+                                        demand = "workers",
+                                        travel_cost = "tt",
+                                        decay_function = my_exp,
+                                        alpha = 1) |> 
+  rename("V_i_exp_pkg" = jobs)
+
+constrained_gamma <- spatial_availability(travel_matrix = od_short,
+                                        land_use_data = taz_short,
+                                        opportunity = "jobs",
+                                        demand = "workers",
+                                        travel_cost = "tt",
+                                        decay_function = my_gamma,
+                                        alpha = 1) |> 
+  rename("V_i_gamma_pkg" = jobs)
+
+package_V <- merge(constrained_unif,constrained_exp, by="id", all=T) 
+package_V <- merge(package_V, constrained_gamma, by="id", all=T)
+
+# add to taz 
+ggh_taz <- merge(ggh_taz, package_V, by.x=("GTA06"), by.y=("id"), all=TRUE)
+
+constrained_unif$V_i_unif_pkg %>% sum(na.rm=T)
+constrained_exp$V_i_exp_pkg %>% sum(na.rm=T)
+constrained_gamma$V_i_gamma_pkg %>% sum(na.rm=T)
+taz_short$workers %>% sum() # each line should equal this number
+```
+
+```{r access-unconstrained-reformating-for-plotting}
+# filter the taz so only hamilton center area. This is for plotting the results that was created using 'od_HAM_origin' and 'ggh_taz_ham_plus' 
+
+ham_taz<- ggh_taz |> filter(PD == 46)
+
+ham_taz <- ham_taz |> 
+  mutate(S_i_unif_norm= S_i_unif_pkg / sum(S_i_unif_pkg, na.rm=T) *100,
+         S_i_exp_norm= S_i_exp_pkg / sum(S_i_exp_pkg, na.rm=T)*100,
+         S_i_gamma_norm = S_i_gamma_pkg / sum(S_i_gamma_pkg, na.rm=T)*100)
+
+# add a cat. variable to each sf object and bind them with rbind. then make them into a faceted tmap. 
+ham_taz_Siunif_norm <- ham_taz |>  
+  mutate(type =  glue("Relative Si (uniform)") ) |>
+  select(S_i_unif_norm, S_i_unif_pkg, type) |> 
+  rename(Access_i_norm = S_i_unif_norm,
+         Access_i = S_i_unif_pkg)
+
+ham_taz_Siexp_norm <- ham_taz|> 
+  mutate(type =  glue("Relative Si (exponential)") ) |>
+  select(S_i_exp_norm, S_i_exp_pkg, type) |> 
+  rename(Access_i_norm = S_i_exp_norm,
+         Access_i = S_i_exp_pkg)
+
+ham_taz_Sigamma_norm<- ham_taz|>
+  mutate(type =  glue("Relative Si (gamma)") ) |>
+  select(S_i_gamma_norm, S_i_gamma_pkg, type) |> 
+  rename(Access_i_norm = S_i_gamma_norm,
+         Access_i = S_i_gamma_pkg)
+
+#ham_taz_Si_facet <- rbind(ham_taz_Siunif_norm, ham_taz_Siexp_norm, ham_taz_Sigamma_norm)
+# ham_taz_Si_facet |> summary()
+```
+
+```{r access-constrained-reformating-for-plotting, include=FALSE}
+ham_taz <- ham_taz |> 
+  mutate(V_i_unif_norm= V_i_unif_pkg / sum(V_i_unif_pkg, na.rm=T) *100,
+         V_i_exp_norm= V_i_exp_pkg / sum(V_i_exp_pkg, na.rm=T)*100,
+         V_i_gamma_norm = V_i_gamma_pkg / sum(V_i_gamma_pkg, na.rm=T)*100)
+
+# add a cat. variable to each sf object and bind them with rbind. then make them into a faceted tmap. 
+ham_taz_Viunif_norm <- ham_taz |>  
+  mutate(type =  glue("Relative Vi (uniform)") ) |>
+  select(V_i_unif_norm, V_i_unif_pkg, type) |> 
+  rename(Access_i_norm = V_i_unif_norm,
+         Access_i = V_i_unif_pkg)
+
+ham_taz_Viexp_norm <- ham_taz|> 
+  mutate(type =  glue("Relative Vi (exponential)") ) |>
+  select(V_i_exp_norm, V_i_exp_pkg, type) |> 
+  rename(Access_i_norm = V_i_exp_norm,
+         Access_i = V_i_exp_pkg)
+
+ham_taz_Vigamma_norm<- ham_taz|>
+  mutate(type =  glue("Relative Vi (gamma)") ) |>
+  select(V_i_gamma_norm, V_i_gamma_pkg, type) |> 
+  rename(Access_i_norm = V_i_gamma_norm,
+         Access_i = V_i_gamma_pkg)
+
+#ham_taz_Vi_facet <- rbind(ham_taz_Viunif_norm, ham_taz_Viexp_norm, ham_taz_Vigamma_norm)
+# ham_taz_Vi_facet |> summary()
+
+# this is interesting, around ~85,000 jobs are allocated to the Hamilton Center region. Though 102,000 jobs are located in the center and 104,000 people live there. This indicates that people who live here may not work here (?). This needs to be thought through...
+ham_taz$V_i_unif_pkg |> sum(na.rm=T)
+ham_taz$V_i_exp_pkg |> sum(na.rm=T)
+ham_taz$V_i_gamma_pkg |> sum(na.rm=T)
+ham_taz$jobs |> sum(na.rm=T)
+ham_taz$workers |> sum(na.rm=T)
+```
+
+```{r access-con-and-unconstrained-plots}
+#| label: fig-con-and-unconstrained-access
+#| fig-cap: "The calculate normalized unconstrained and constrained accessibility score for Hamilton Center. Calculated using exponential, gamma, and uniform impedance functions."
+
+ham_taz_facet <- rbind(ham_taz_Siunif_norm, ham_taz_Siexp_norm, ham_taz_Sigamma_norm,
+                       ham_taz_Viunif_norm, ham_taz_Viexp_norm, ham_taz_Vigamma_norm)
+
+# now plot w/ facet
+uncon_con_plots <- tm_shape(ham_taz_facet) +
+  tm_polygons("Access_i_norm",
+              palette = c("red", "yellow", "darkgreen"),
+              style ="cont",
+              breaks=c(-0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, +2.2), 
+              label = c(">0.4%", "0.6%", "0.8%","1.0%", "1.2%","1.4%", "1.6%", "1.8%", "2.0%","<2.2%"),
+              title = glue_col("% of total potential job interactions in the region
+              *{sum(ham_taz_facet$`Access_i`[which(ham_taz_facet$type == 'Relative Si (uniform)')], na.rm=T) |> round()} (Si uniform), {sum(ham_taz_facet$`Access_i`[which(ham_taz_facet$type == 'Relative Si (exponential)')], na.rm=T) |> round()} (Si exp), and {sum(ham_taz_facet$`Access_i`[which(ham_taz_facet$type == 'Relative Si (gamma)')], na.rm=T) |> round()} (Si gamma)
+              {sum(ham_taz_facet$`Access_i`[which(ham_taz_facet$type == 'Relative Vi (uniform)')], na.rm=T) |> round()} (Vi uniform, exponential, and gamma)"),
+              legend.is.portrait = FALSE)+
+  tm_scale_bar(position = c("right", "bottom"),breaks=c(0,1,2,4) )+
+  tm_compass(position = c("left", "top"), size=1.0)+
+  tm_facets("type", ncol = 3) +
+  tm_layout(asp = 1.5,
+            legend.outside=TRUE, 
+            legend.outside.position = "bottom",
+            legend.position = c(0.2, 0.25),
+            legend.title.size = 0.9)
+uncon_con_plots
+```
+```{r creating-worker-job-plot}
+ggh_taz_ham_all <- (ggh_taz |> filter(PD == 46)) |> 
+  st_buffer(dist=50) |>
+  group_by(PD == 46) |> summarize() |>
+  st_buffer(dist=150)
+
+workers_tm <- 
+  tm_shape(ggh_taz_ham_plus |> filter(PD == 46))+
+  tm_polygons(col = "workers", title = "Workers", style = "log10", border.col = NULL) +
+  tm_scale_bar(breaks=c(0,1,2,4), position = c("left", "bottom") ) +
+  tm_compass(position = c("left", "top")) +
+  tm_shape(ggh_taz_ham_all) + 
+  tm_polygons(border.col = "Red", lwd=2, alpha=0)
+
+jobs_tm <-
+  tm_shape(ggh_taz_ham_plus) +
+  tm_polygons(col = "jobs", title = "Jobs", style = "log10", border.col = NULL) +
+  tm_scale_bar(breaks=c(0,10,20,40), position = c("right", "bottom") ) +
+  tm_compass(position = c("right", "top")) +
+  tm_shape(ggh_taz_ham_all) + 
+  tm_polygons(border.col = "Red", lwd=2, alpha=0)
+
+workers_jobs_plot <- tmap_arrange(workers_tm, jobs_tm, ncol = 2)
+```
+
+In @fig-con-and-unconstrained-access above, we visualize all accessibility values as a percentage of the sum of the total values in the region for each calculation (i.e., the total values: `r sum(ham_taz_facet$Access_i[which(ham_taz_facet$type == 'Relative Si (uniform)')], na.rm=T) |> round()`, `r sum(ham_taz_facet$Access_i[which(ham_taz_facet$type == 'Relative Si (exponential)')], na.rm=T) |> round()`,  and `r sum(ham_taz_facet$Access_i[which(ham_taz_facet$type == 'Relative Si (gamma)')], na.rm=T) |> round()` jobs for $S_i$ using binary, exponential, and gamma functions respectively and `r sum(ham_taz_facet$Access_i[which(ham_taz_facet$type == 'Relative Vi (uniform)')], na.rm=T) |> round()` jobs for $V_i$ for all functions). 
+
+The value for each calculation is normalized because each impedance function weights the opportunities counted in differing ways and there is no process that evenly limits or redistributes the summation. As such, a common accessibility maximum across all plots cannot be determined since accessibility is a function of the summation of weighted opportunities. For this reason, the normalization of the accessibility values is done to make sense of relative 'highs' and 'lows' in the region.
+
+Let's look at the top row in @fig-con-and-unconstrained-access: unconstrained accessibility. Before normalization, the raw values can be understood as the number of job opportunities that people within Hamilton Center can potentially interact based on an empirically-fitted impedance function. For instance, for neighbourhoods with "high" accessibility (Greens - 1.80% relative values or higher), according to the uniform impedance this means they can interact with `r (1.8/100)*sum(ham_taz_facet$Access_i[which(ham_taz_facet$type == 'Relative Si (uniform)')], na.rm=T) |> round(digits=-3)` jobs or more given a 45 min car travel time (our selected max threshold). For the exponential and gamma functions this "high" relative value is equivalent to `r (1.8/100)*sum(ham_taz_facet$Access_i[which(ham_taz_facet$type == 'Relative Si (exponential)')], na.rm=T)|> round(digits=-3)` and `r (1.8/100)*sum(ham_taz_facet$Access_i[which(ham_taz_facet$type == 'Relative Si (gamma)')], na.rm=T)|> round(digits=-3)` or higher potential jobs interactions. These raw values are difficult to interpret, so seeing a neighbourhood as being an area of relative 'high', 'medium' or 'low' accessibility value simplifies the interpretation of 'potential interaction'. 
+
+Interestingly though, the trends across the top row visually look similar: TAZ that have 'high', 'medium' and 'low' values are similar across all plots. This indicates that the selection of impedance function, at least within this visualization, does not result in too much variation in the results. As discussed in the first post (**LINK TO BLOG POST1**), the selection of parameters for all impedance functions were optimally derived from empirical home-to-work travel flows, so seeing similar trends across plots is not unexpected. The selection of the parameters may matter more than the shape (i.e., type of theoretical distribution selected).
+
+Next, let's look at the second row in @fig-con-and-unconstrained-access: the visualization of singly-constrained accessibility (spatial availability $V_i$).  Across all plots, the trends are even more similar than the trends across the top row of plots. This is because, the total sum of opportunities is the same across all impedance functions as the result of the proportional allocation feature. 
+
+Also, of note are the differences between  *constrained* and *unconstrained* plots: namely, TAZ with low values (red) are often low in both plots, however, many low/medium value TAZ have high value TAZ in the second row. Why? Because opportunity-seeking competition is considered in the constrained calculations! 
+
+For instance, in the top row, some TAZ in the south have medium (yellowish) singly-constrained values. This is the result of relatively average impedance values. However, looking at the bottom row, the same relatively average impedance values combined with relatively _low_ competition results in TAZ result in relatively high (green) values under the constrained calculation. This indicates that though some TAZ have medium/low _unconstrained_ accessibility (i.e., potential interaction), when considering the neighbours who are competing for the same opportunities, the _constrained_ accessibility score is high. These TAZ may in fact have fine accessibility levels, considering their low competition, and the focus should be improving areas with low constrained accessibility (red).
+
+Across both rows, we can see common low values (red) TAZ located in the north end of the city. From unconstrained accessibility, we know these TAZ have high relative travel impedance - this is most likely because people who work in the north end do not live in Hamilton Center and thus have high travel times (recall: the accessibility calculations in this demonstration only considers trips that originate from Hamilton Center, almost 50% of those who live within Hamilton Center travel to areas outside of Hamilton Center for work). Interestingly though, we can see that there is a high relative number of jobs within these TAZ (see @fig-worker-job-plot below), however, even the number of jobs does not balance out the impedance value and higher demand for those jobs. Hence, the unconstrained accessibility measure is also low.
+
+```{r worker-job-plot}
+#| label: fig-worker-job-plot
+#| fig-cap: "The number of workers and jobs in Hamilton Center (log scale). Note, workers within Hamilton and jobs that workers access within and outside of Hamilton are considered in the accessibility valuations - only jobs in Hamilton Center are visualized."
+workers_jobs_plot
+```
+
+## Concluding points
+
+Accessibility measures characterize the relationship between land-use and transportation travel impedance. How the relationship is conceptualization (if there's competition or not) and how the travel impedance should be weighted (what function describes travel behaviour) are critical. 
+
+Depending on how this analysis is conducted will shed light on regions of inequitable accessibility. From our plots, areas that have low unconstrained accessibility ($S_i$) are worth inspecting but areas with low constrained ($V_i$) should be prioritized. Since places of employment are non-divisible (only 1 person can take 1 job), taking into consideration competition matters for this opportunity type.
+
+Ultimately, the accessibility values represent the number of jobs that could *potentially* be reached by from each origin. We should take action in increasing accessibility in areas that are yellow and red to reduce inequities of access. But by using constrained accessibility measures - we can see that not all yellow and red areas have low constrained accessibility. They may have relatively fine accessibility given their neighbouring demand for opportunities.
+
+Access to opportunities is a multi-faceted concept. The use of multiple indicators can illuminate spatial patterns of inequities and add another layer of confidence to the quantitative analysis. But our journey is not done. Once these spatial inequities have been identified - what do we do about it? 
+
+Another advantage of using competitive accessibility, namely spatial availability, is the proportional allocation feature. Since the number of opportunities for the region is proportionally allocated to each origin - the raw output can be used to plan for how many more opportunities are needed for each origin. Further, because spatial availability values per origin can also be divided by population at that origin. This can be interpreted as an opportunity per capita value. This value can be used as a benchmark to compare again opportunity per capita across areas of the region and between regions. This, along with different equity conceptualizations, will be explored in a following post.
+
+Openness is legitimacy: this blog post was written in a R environment and can be fully reproduced from the materials available at this GitHub ([repository](https://github.com/soukhova/MJ-Accessibility-Blogs)). If inclined, see the open access PDF of the full article (which includes the mathematical formulation for the spatial availability function) in the references [@soukhovIntroducingSpatialAvailability2023]. 
+
+_The data used in this post is a subset of data from {TTS2016R}, the plots are created using {tmap}, and spatial objects are manipulated using {sf}, along with base {R} functions._
+
+```{r comparing-to-manual-calc1, eval=FALSE}
+#let's check to see if the calculated S_i and V_i is equal to manual calculation...
+
+#first S_i -- it's the same!
+LOS_j <- od_HAM_origin |>
+  mutate(f_unif = dunif(travel_time, min=unif_$estimate[1], max=unif_$estimate[2]),
+         f_unif = ifelse(f_unif == 0, 0.00000000000000000001, f_unif),
+         f_exp = dexp(travel_time, rate = exp_$estimate),
+         f_gamma = dgamma(travel_time, shape = gamma_$estimate[1], rate = gamma_$estimate[2]),
+         f_gamma = ifelse(f_gamma == 0, 0.00000000000000000001, f_gamma)) |>
   group_by(Destination) |>
   summarize(opp = first(jobs),
-            R_j_bin = sum(workers * f_bin),
+            R_j_unif = sum(workers * f_unif),
             R_j_exp = sum(workers * f_exp),
             R_j_gamma = sum(workers * f_gamma),
             .groups = "drop") |>
-  mutate(R_j_bin = ifelse(R_j_bin == 0, NA, R_j_bin),
+  mutate(R_j_unif = ifelse(R_j_unif == 0, NA, R_j_unif),
          #R_j_exp = ifelse(R_j_exp == 0,0.00000000000000000001, R_j_exp),
          #R_j_gamma = ifelse(R_j_gamma == 0,0.00000000000000000001, R_j_gamma),
-         LOS_j_bin = opp/R_j_bin,
+         LOS_j_unif = opp/R_j_unif,
          LOS_j_exp = opp/R_j_exp,
          LOS_j_gamma = opp/R_j_gamma)
 
 # Hansen- accessibility
-S <- od |>
+S <- od_HAM_origin |>
+  mutate(f_unif = dunif(travel_time, min=unif_$estimate[1], max=unif_$estimate[2]),
+         f_unif = ifelse(f_unif == 0, 0.00000000000000000001, f_unif),
+         f_exp = dexp(travel_time, rate = exp_$estimate),
+         f_gamma = dgamma(travel_time, shape = gamma_$estimate[1], rate = gamma_$estimate[2]),
+         f_gamma = ifelse(f_gamma == 0, 0.00000000000000000001, f_gamma)) |>
   left_join(LOS_j |> 
               dplyr::select(Destination),
             by = "Destination") |>
   group_by(Origin) |>
-  summarize(S_i_bin= sum(jobs * f_bin, na.rm=T),
+  summarize(S_i_unif= sum(jobs * f_unif, na.rm=T),
             S_i_exp= sum(jobs * f_exp, na.rm=T), 
             S_i_gamma = sum(jobs * f_gamma, na.rm=T))
+
+# compare calculated to the packaged calculated S
+comp_S <- merge(package_S, S, by.x="id", by.y ="Origin", all=T) 
+
+data.frame(comp_S$S_i_unif_pkg, comp_S$S_i_unif,
+           comp_S$S_i_exp_pkg, comp_S$S_i_exp,
+           comp_S$S_i_gamma_pkg, comp_S$S_i_gamma)
 ```
 
-```{r constrained-access-calculations, echo=FALSE, warning=FALSE}
+```{r comparing-to-manual-calc-test2, eval=FALSE}
+#now V_i
 # Spatial availability disaggregated - binary
-V_ij_bin <- od |> 
+V_ij_unif <- od_HAM_origin |>
+  mutate(f_unif = dunif(travel_time, min=unif_$estimate[1], max=unif_$estimate[2]),
+         f_unif = ifelse(f_unif == 0, 0.00000000000000000001, f_unif),
+         f_exp = dexp(travel_time, rate = exp_$estimate),
+         f_gamma = dgamma(travel_time, shape = gamma_$estimate[1], rate = gamma_$estimate[2]),
+         f_gamma = ifelse(f_gamma == 0, 0.00000000000000000001, f_gamma)) |>
   #mutate(f_bin = ifelse(f_bin == 0, 0.00000000000000000001, f_bin)) |>
   mutate(r = 1) |>
   sp_avail_detailed(o_id = Origin,
@@ -350,15 +689,20 @@ V_ij_bin <- od |>
                     pop = workers, 
                     opp = jobs, 
                     r = r, 
-                    f = f_bin, 
+                    f = f_unif, 
                     alpha = 1.0) #alpha 1.54 
 
-V_i_bin <- V_ij_bin |>
+V_i_unif <- V_ij_unif |>
   group_by(Origin) |>
-  summarise(V_i_bin = sum(V_ij))
+  summarise(V_i_unif = sum(V_ij))
 
 # Spatial availability disaggregated - exponential
-V_ij_exp <- od |> #mutate(f_exp = ifelse(f_exp == 0, 0.00000000000000000001, f_exp)) |> 
+V_ij_exp <- od_HAM_origin |>
+  mutate(f_unif = dunif(travel_time, min=unif_$estimate[1], max=unif_$estimate[2]),
+         f_unif = ifelse(f_unif == 0, 0.00000000000000000001, f_unif),
+         f_exp = dexp(travel_time, rate = exp_$estimate),
+         f_gamma = dgamma(travel_time, shape = gamma_$estimate[1], rate = gamma_$estimate[2]),
+         f_gamma = ifelse(f_gamma == 0, 0.00000000000000000001, f_gamma)) |>
   mutate(r = 1) |>
   sp_avail_detailed(o_id = Origin,
                     d_id = Destination, 
@@ -374,7 +718,12 @@ V_i_exp <- V_ij_exp |>
   select(-Origin)
 
 # Spatial availability disaggregated - gamma
-V_ij_gamma <- od |> #mutate(f_gamma = ifelse(f_gamma == 0, 0.00000000000000000001, f_gamma)) |> 
+V_ij_gamma <- od_HAM_origin |>
+  mutate(f_unif = dunif(travel_time, min=unif_$estimate[1], max=unif_$estimate[2]),
+         f_unif = ifelse(f_unif == 0, 0.00000000000000000001, f_unif),
+         f_exp = dexp(travel_time, rate = exp_$estimate),
+         f_gamma = dgamma(travel_time, shape = gamma_$estimate[1], rate = gamma_$estimate[2]),
+         f_gamma = ifelse(f_gamma == 0, 0.00000000000000000001, f_gamma)) |>
   mutate(r = 1) |>
   sp_avail_detailed(o_id = Origin,
                     d_id = Destination, 
@@ -389,514 +738,21 @@ V_i_gamma <- V_ij_gamma |>
   summarise(V_i_gamma = sum(V_ij)) |>
   select(-Origin)
 
-V <- cbind(V_i_bin, V_i_exp, V_i_gamma)
+V <- cbind(V_i_unif, V_i_exp, V_i_gamma)
 
-#checking to make sure they add up to the jobs in GGH -> 3,052,233 people go to jobs in GGH
-V$V_i_bin |> sum(na.rm=T)
-V$V_i_exp |> sum(na.rm=T)
-V$V_i_gamma |> sum()
+# compare calculated to the packaged calculated S
+comp_V <- merge(package_V, V, by.x="id", by.y ="Origin", all=T) 
 
-od$Persons |> sum() # there are 3,052,233 people make trips from origin to jobs in the GGH.
-```
+data.frame(comp_V$V_i_unif_pkg, comp_V$V_i_unif,
+           comp_V$V_i_exp_pkg, comp_V$V_i_exp,
+           comp_V$V_i_gamma_pkg, comp_V$V_i_gamma)
 
-```{r extra-calc-shen-for-comparision}
-# Shen-type accessibility and 'equivalent' balancing factor in Shen. Here we can see 'a' should be equal to v (spatial availability divided by worker)
-a <- od |>
-  left_join(LOS_j |> dplyr::select(Destination,
-                                   LOS_j_bin, LOS_j_exp, LOS_j_gamma),
-            by = "Destination") |>
-  #mutate(f_bin = ifelse(f_bin == 0, 0.000001, f_bin)) |>
-  group_by(Origin) |>
-  summarize(a_i_bin = sum((LOS_j_bin * f_bin), 
-                          na.rm=T),  #Shen/2SFCA,
-            a_i_exp = sum((LOS_j_exp * f_exp), 
-                          na.rm=T), 
-            a_i_gamma = sum((LOS_j_gamma * f_gamma), 
-                            na.rm=T),
-            .groups = "drop")
-
-a |> summary()
-```
-
-```{r join-results}
-# Join all results to traffic analysis zones
-ggh_taz_acc <- ggh_taz |> 
-  dplyr::select(-c(AREA)) |>
-  merge(S,
-        by.x = c("GTA06"), by.y = c("Origin"), all=TRUE) |>
-  merge(V,
-        by.x = c("GTA06"), by.y = c("Origin"), all=TRUE) |>
-  merge(a,
-        by.x = c("GTA06"), by.y = c("Origin"), all=TRUE)
-
-ggh_taz_acc <- ggh_taz_acc |> 
-  mutate(workers = ifelse(is.na(workers), 0, workers),
-         jobs = ifelse(is.na(jobs), 0, jobs))
-
-ggh_taz_acc <- ggh_taz_acc |>
-  mutate(#jobs = replace_na(jobs, 0),
-    v_i_bin = V_i_bin/workers,
-    v_i_exp = V_i_exp/workers,
-    v_i_gamma = V_i_gamma/workers) # Shen=type accessibility in number of jobs after multiplying by opportunity-seeking population)
-```
-
-```{r verify-employment}
-# Regional total number of jobs (this is the number of jobs in each TAZ in Toronto as defined by the TTS). Equals to the number of workers.
-ggh_taz_acc |>
-  st_drop_geometry() |>
-  select(workers) |> sum(na.rm=T)
-ggh_taz_acc$jobs |> sum(na.rm=T)
-
-# Verify that v_i times workers adds up to regional total.. a_i has some missing values currently - will fix later. point is v_i is correct.
-ggh_taz_acc |>
-  st_drop_geometry() |>
-  #transmute(jobs = A_i * workers) |>
-  summarize(jobs = sum(v_i_bin*workers, 
-                       na.rm = TRUE),
-            jobs2 = sum(a_i_exp*workers,
-                        na.rm=TRUE))
-
-# Testing... Jobs2 (i.e., shen's jobs should when multipled by workers equal to v_i_bin. I know v_i_bin,exp,gamma is correct because V_i is correct. Interestingly, a_i_exp is correct! but not a_i_bin or a_i_gamma. They do not sum to 3,052,233). Let's do some exploration below... I can't figure it out still :/
-test <- data.frame(ggh_taz_acc$GTA06, ggh_taz_acc$a_i_bin |> round(digits = 5), 
-                   ggh_taz_acc$v_i_bin|> round(digits = 5), 
-                   ggh_taz_acc$a_i_bin |> round(digits = 5)== ggh_taz_acc$v_i_bin|> round(digits = 5))
-
-test1 <- od |>
-  left_join(LOS_j |> dplyr::select(Destination,
-                                   LOS_j_bin, LOS_j_exp, LOS_j_gamma),
-            by = "Destination") |>
-  filter(Origin == "1037") |>
-  mutate(a_i_bin = sum(LOS_j_bin * f_bin, na.rm=T),  #Shen/2SFCA,
-         a_i_exp = sum(LOS_j_exp * f_exp, na.rm=T), 
-         a_i_gamma = sum(LOS_j_gamma * f_gamma, na.rm=T))
-```
-
-```{r verify-population}
-# Regional total population
-ggh_taz_acc |>
-  st_drop_geometry() |>
-  summarize(workers = sum(workers,
-                          na.rm = TRUE))
-
-
-# Regional total opportunity-seeking population in spatial availability
-ggh_taz_acc |>
-  st_drop_geometry() |>
-  summarize(workers_bin = sum(V_i_bin,
-                              na.rm = TRUE),
-            workers_exp = sum(V_i_exp,
-                              na.rm = TRUE),
-            workers_gamma = sum(V_i_gamma,
-                                na.rm = TRUE))
-```
-
-```{r testing-using-accessibilitypackage, echo=FALSE, warning=FALSE}
-#Reformatting for input into the accessibility() function. I'm doing this to test the accessibility funcitno for how it calculates, bin, exp, and gamma hansen-type accessibility (S_i). 
-#od_short <- od |> transmute(Origin, Destination, travel_time_coale) |>
-
-# Retrieve jobs and workers from the same data table that was used to calculate accessibility above
-taz_short_workers <- od |>
-  transmute(id = Origin,
-            workers) |>
-  distinct(id, .keep_all = TRUE)
-
-taz_short_jobs <- od |>
-  transmute(id = Destination,
-            jobs) |>
-  distinct(id, .keep_all = TRUE)
-
-taz_short_2 <- taz_short_workers |>
-  full_join(taz_short_jobs,
-            by = "id") |>
-  drop_na()
-
-# Previous version
-od_short <- od |> 
-  transmute(Origin, 
-            Destination, 
-            travel_time) |>
-  rename("from_id" = Origin ,
-         "to_id" = Destination,
-         "tt" = travel_time)
-
-taz_short <- ggh_taz |> 
-  st_drop_geometry() |> 
-  transmute(GTA06, 
-            workers, 
-            jobs) |>
-  rename("id" = GTA06) |> 
-  mutate(workers = ifelse(is.na(workers), 0, workers),
-         jobs = ifelse(is.na(jobs), 0, jobs))
-
-#impedance functions for the function's use
-my_binary <- function(x) {
-  weights <- ifelse(x > gamma_bin, 0, 1) 
-  return(weights)
-}
-
-## AP: DO NOT RESCALE; I commented out `|> scales::rescale()`
-my_exp <- function(x) {
-  weights <- dexp(x, rate = rate_exp)#  |> scales::rescale()
-  # The exponential function never gives zeros
-  #weights <- ifelse(weights == 0, 0.00000000000000000001, weights)
-  return(weights)
-}
-#my_exp(c(0.1,1,10,30,100,180,190,200)) #testing output from function... it's correct!
-
-## AP: DO NOT RESCALE; I commented out `|> scales::rescale()`
-my_gamma <- function(x) {
-  weights <- dgamma(x, shape = shape_gamma, rate = rate_gamma)# |> scales::rescale()
-  weights <- ifelse(weights == 0, 0.00000000000000000001, weights)
-  return(weights)
-}
-# my_gamma(c(0,1,10,30,100)) #testing output from function... it's correct!
-
-# calc for package... let's try unconstrained first
-unconstrained_bin <- gravity(
-  travel_matrix = od_short,
-  land_use_data = taz_short,
-  opportunity = "jobs",
-  travel_cost = "tt",
-  decay_function = my_binary) |> 
-  rename("S_i_bin_pkg" = jobs)
-
-# NOTE: using this function gives us the same results as the one above ^
-# unconstrained_bin2 <- cumulative_cutoff(
-#   travel_matrix = od_short,
-#   land_use_data = taz_short,
-#   opportunity = "jobs",
-#   travel_cost = "travel_time",
-#   cutoff = 20) |> rename("S_i_bin_pkg" = jobs)
-
-unconstrained_exp <- gravity(
-  travel_matrix = od_short,
-  land_use_data = taz_short,
-  opportunity = "jobs",
-  travel_cost = "tt",
-  decay_function = my_exp) |> 
-  rename("S_i_exp_pkg" = jobs)
-
-unconstrained_gamma <- gravity(
-  travel_matrix = od_short,
-  land_use_data = taz_short,
-  opportunity = "jobs",
-  travel_cost = "tt",
-  decay_function = my_gamma)  |> rename("S_i_gamma_pkg" = jobs)
-
-package_S <- merge(unconstrained_bin,unconstrained_exp, by="id", all=T) 
-package_S <- merge(package_S, unconstrained_gamma, by="id", all=T)
-
-# add to taz (... a test for now)
-#test <- merge(ggh_taz_acc, package_S, by.x=("GTA06"), by.y=("id"), all=TRUE)
-
-test <- merge(S, package_S, by.x=("Origin"), by.y=("id"), all=TRUE)
-
-#so we have a problem... the binary produced using accessibility() is correct! but not exp or gamma. We'll get back to this later.. It isn't an issue with my function, I tried the default exponential function with my parameter and the function's results were the same as the ones below. Maybe I calculate accessibility wrong..? But why does the binary one work?
-## AP: The results seem to match after removing the rescaling
-test |> select(c(S_i_bin, S_i_bin_pkg, S_i_exp, S_i_exp_pkg, S_i_gamma, S_i_gamma_pkg)) |> head()
-```
-
-<!-- THE ISSUE IS CONTAINED NOW TO THIS SECTION HERE -->
-
-<!-- Function accessibility::spatial_availability does the summation of the impedance over the origins, whereas in the paper it is done over the destinations. AP forked the package and changed the function. After this the results are identical. -->
-
-```{r testing-using-accessibilitypackage-2, echo=FALSE, warning=FALSE}
-# Let's test the spatial_availability function in the accessibility() package.
-
-#just gamma for now... (I also tried bin and exp)
-constrained_exp <- spatial_availability(travel_matrix = od_short,
-                                        land_use_data = taz_short,
-                                        opportunity = "jobs",
-                                        demand = "workers",
-                                        travel_cost = "tt",
-                                        decay_function = my_exp,
-                                        alpha = 1) |> 
-  rename("V_i_exp_pkg" = jobs)
-
-# add to taz (... a test for now)
-#test <- merge(ggh_taz_acc, constrained_exp, by.x=("GTA06"), by.y=("id"), all=TRUE)
-test <- merge(V, 
-              constrained_exp, 
-              by.x=("Origin"), 
-              by.y=("id"), 
-              all=TRUE)
-
-#so we have a problem... the exp produced does not match the spatial_avail_detailed() output. This is troubling...
-test |> select(c(V_i_exp, V_i_exp_pkg)) |> head()
-```
-<!-- END OF PROBLEMATIC CODE --> <!-- AFTER THIS THE RESULTS OF ANASTASIA'S CODE AND THE RESULTS OF PACKAGE {accessibility} MATCH -->
-
-```{r testing-using-accessibilitypackage-3, echo=FALSE, warning=FALSE}
-#Now let's test shen-type acessibiilty, 2sfca! 
-constrained_bin_a <- floating_catchment_area(
-  travel_matrix = od_short,
-  land_use_data = taz_short,
-  opportunity = "jobs",
-  demand = "workers",
-  travel_cost = "tt",
-  decay_function = my_binary,
-  method = "2sfca") |> rename("a_i_bin_pkg" = jobs)
-
-constrained_exp_a <- floating_catchment_area(
-  travel_matrix = od_short,
-  land_use_data = taz_short,
-  opportunity = "jobs",
-  demand = "workers",
-  travel_cost = "tt",
-  decay_function = my_exp,
-  method = "2sfca") |> rename("a_i_exp_pkg" = jobs)
-
-constrained_gamma_a <- floating_catchment_area(
-  travel_matrix = od_short,
-  land_use_data = taz_short,
-  opportunity = "jobs",
-  demand = "workers",
-  travel_cost = "tt",
-  decay_function = my_gamma,
-  method = "2sfca") |> rename("a_i_gamma_pkg" = jobs)
-
-package_a <- merge(constrained_bin_a,constrained_exp_a, by="id", all=T) 
-package_a <- merge(package_a, constrained_gamma_a, by="id", all=T)
-
-# add to taz 
-test <- merge(ggh_taz_acc, package_a, by.x=("GTA06"), by.y=("id"), all=TRUE)
-
-#yay my calc of a_i matches the function! Great. 
-test |> select(c(a_i_bin, a_i_bin_pkg, a_i_exp, a_i_exp_pkg, a_i_gamma, a_i_gamma_pkg)) |> head()
-test1 <- test |> select(c(a_i_bin, a_i_bin_pkg, a_i_exp, a_i_exp_pkg, a_i_gamma, a_i_gamma_pkg)) 
-```
-
-```{r}
-# AP: THE RESULTS NOW MATCH EXACTLY
-
-# what is a really interesting finding though is... my calculation of 2sfca is slightly off it seems and the package calculates it correctly! My calculation is correct for exp only. Not sure why..
-test |>
-  st_drop_geometry() |>
-  #transmute(jobs = A_i * workers) |>
-  summarize(jobs_vi_exp = sum(v_i_exp*workers, 
-                              na.rm = TRUE),
-            jobs_ai_exp = sum(a_i_exp*workers,
-                              na.rm=TRUE),
-            jobs_ai_exp_pkg = sum(a_i_exp_pkg*workers,
-                                  na.rm=TRUE),
-            jobs_vi_gamma = sum(v_i_gamma*workers, 
-                                na.rm = TRUE),
-            jobs_ai_gamma = sum(a_i_gamma*workers,
-                                na.rm=TRUE),
-            jobs_ai_gamma_pkg = sum(a_i_gamma_pkg*workers,
-                                    na.rm=TRUE))
-```
-
-```{r access-unconstrained-reformating-for-plotting}
-# filter the taz so only hamilton center area. This is for plotting purposes
-ham_taz<- ggh_taz_acc |> filter(PD == 46)
-
-ham_taz <- ham_taz |> 
-  mutate(S_i_bin_norm= S_i_bin / sum(S_i_bin, na.rm=T) *100,
-         S_i_exp_norm= S_i_exp / sum(S_i_exp, na.rm=T)*100,
-         S_i_gamma_norm = S_i_gamma / sum(S_i_gamma, na.rm=T)*100)
-
-# add a cat. variable to each sf object and bind them with rbind. then make them into a faceted tmap. 
-ham_taz_Sibin_norm <- ham_taz |>  
-  mutate(type =  glue("Relative Si (binary)") ) |>
-  select(S_i_bin_norm, S_i_bin, type) |> 
-  rename(S_i_norm = S_i_bin_norm,
-         S_i = S_i_bin)
-
-ham_taz_Siexp_norm <- ham_taz|> 
-  mutate(type =  glue("Relative Si (exponential)") ) |>
-  select(S_i_exp_norm, S_i_exp, type) |> 
-  rename(S_i_norm = S_i_exp_norm,
-         S_i = S_i_exp)
-
-ham_taz_Sigamma_norm<- ham_taz|>
-  mutate(type =  glue("Relative Si (gamma)") ) |>
-  select(S_i_gamma_norm, S_i_gamma, type) |> 
-  rename(S_i_norm = S_i_gamma_norm,
-         S_i = S_i_gamma)
-
-ham_taz_Si_facet <- rbind(ham_taz_Sibin_norm, ham_taz_Siexp_norm, ham_taz_Sigamma_norm)
-ham_taz_Si_facet |> summary()
 ```
 
 
-Further, accessibility is calculated for the full GGH region but we only visualize the Hamilton Center region for the purpose of illustration. The *unconstrained* accessibility plots are plotted: from left to right, uniform, expoential, and gamma.
-
-```{r access-unconstrained-plots}
-# now plot w/ facet
-uncon_plots <- tm_shape(ham_taz_Si_facet) +
-  tm_polygons("S_i_norm",
-              palette = c("red", "yellow", "darkgreen"),
-              style ="cont",
-              breaks=c(-0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, +2.2), 
-              label = c(">0.4%", "0.6%", "0.8%","1.0%", "1.2%","1.4%", "1.6%", "1.8%", "2.0%","<2.2%"),
-              title = glue_col("% of total potential job interactions in the region
-              *{sum(ham_taz_Si_facet$`S_i`[which(ham_taz_Si_facet$type == 'Relative Si (binary)')], na.rm=T) |> round()} (Si binary), {sum(ham_taz_Si_facet$`S_i`[which(ham_taz_Si_facet$type == 'Relative Si (exponential)')], na.rm=T) |> round()} (Si exp), and {sum(ham_taz_Si_facet$`S_i`[which(ham_taz_Si_facet$type == 'Relative Si (gamma)')], na.rm=T) |> round()} (Si gamma)"),
-              legend.is.portrait = FALSE)+
-  tm_scale_bar(position = c("right", "bottom"),breaks=c(0,1,2,4) )+
-  tm_compass(position = c("left", "top"), size=1.0)+
-  tm_facets("type", ncol = 3) +
-  tm_layout(asp = 1.5,
-            legend.outside=TRUE, 
-            legend.outside.position = "bottom",
-            legend.position = c(0.2, 0.25),
-            legend.title.size = 0.9)
-
-#% of total jobs in the region - {sum(S_i, na.rm=T) |> round()} jobs (Si binary), {sum(S_i_exp, na.rm=T) |> round()} jobs (Si exp), and {sum(S_i_gamma, na.rm=T) |> round()} jobs (Si gamma)
-```
-
-In the plots above, we visualize the three plots. Each displays the relative accessibility value as a percentage of the total opportunities in the region (61296 jobs, 48744 jobs and 66190 jobs for binary, expoential, and gamma functions respectively). This rescaling is done so values can be interpreted on the same scale.
-
-Before rescaling, the raw values can be understood as the number of job opportunities within the GGH that I can potentially interact with given the impedance function. For instance, for neighbourhoods with "high" accessibility (Greens - 1.80% relative values or higher), according to the binary impedance this means they can interact with `r (1.8/100)*2970995 |> round(digits=-3)` jobs or more by a 20 min car travel time (our selected threshold). For the exponential and gamma functions this "high" relative value is equivalent to `r (1.8/100)*2093825|> round(digits=-3)` and `r (1.8/100)*3086152|> round(digits=-3)` or higher potential jobs interactions. These raw values are difficult to interpret, so seeing a neighbourhood as being an area of relative 'high', 'medium' or 'low' accessibility value is simplest.
-
-<!-- You can see that the range of raw accessibility values differ depending on the impedance function used. This is because the functions weight the opportunities counted in the calculation in differing ways. A common accessibility maximum cannot be determined across all three impedance function since accessibility is a function of the summation of weighted opportunities. For this reason, rescaling the accessibility values, as done in the plots above, is often done to make sense of relative 'highs' and 'lows' in the region. -->
-
-Interestingly though, the trends across all impedance functions visually look similar - red, yellow, and green areas similar across all plots with some variation in intensity.
-
-Next, we visualize *constrained* accessibility (spatial availability $V_i$). Like the plots above, from left to right: uniform, expoential, and gamma.
-
-```{r access-constrained-reformating-for-plotting}
-ham_taz <- ham_taz |> 
-  mutate(V_i_bin_norm= V_i_bin / sum(V_i_bin, na.rm=T) *100,
-         V_i_exp_norm= V_i_exp / sum(V_i_exp, na.rm=T)*100,
-         V_i_gamma_norm = V_i_gamma / sum(V_i_gamma, na.rm=T)*100)
-
-# add a cat. variable to each sf object and bind them with rbind. then make them into a faceted tmap. 
-ham_taz_Vibin_norm <- ham_taz |>  
-  mutate(type =  glue("Relative Vi (binary)") ) |>
-  select(V_i_bin_norm, V_i_bin, type) |> 
-  rename(V_i_norm = V_i_bin_norm,
-         V_i = V_i_bin)
-
-ham_taz_Viexp_norm <- ham_taz|> 
-  mutate(type =  glue("Relative Vi (exponential)") ) |>
-  select(V_i_exp_norm, V_i_exp, type) |> 
-  rename(V_i_norm = V_i_exp_norm,
-         V_i = V_i_exp)
-
-ham_taz_Vigamma_norm<- ham_taz|>
-  mutate(type =  glue("Relative Vi (gamma)") ) |>
-  select(V_i_gamma_norm, V_i_gamma, type) |> 
-  rename(V_i_norm = V_i_gamma_norm,
-         V_i = V_i_gamma)
-
-ham_taz_Vi_facet <- rbind(ham_taz_Vibin_norm, ham_taz_Viexp_norm, ham_taz_Vigamma_norm)
-ham_taz_Vi_facet |> summary()
-
-# this is interesting, around ~85,000 jobs are allocated to the Hamilton Center region. Though 102,000 jobs are located in the center and 104,000 people live there. This indicates that people who live here may not work here (?). This needs to be thought through...
-ham_taz$V_i_bin |> sum(na.rm=T)
-ham_taz$V_i_exp |> sum(na.rm=T)
-ham_taz$V_i_gamma |> sum(na.rm=T)
-ham_taz$jobs |> sum(na.rm=T)
-ham_taz$workers |> sum(na.rm=T)
-```
-
-```{r access-constrained-plots}
-# # now plot w/ facet. NOTE: this is one for the unconverted Vi values.
-# tm_shape(ham_taz_Vi_facet) +
-#   tm_polygons("V_i",
-#               palette = c("red", "yellow", "darkgreen"),
-#               style ="cont",
-#               breaks=c(-200, 400, 600, 800, 1000, 1200, +1400), 
-#               label = c(">200", "400", "600","800", "1000","1200", "<1400"),
-#               title = glue_col("spatially available job opportunities in the region"),
-#               legend.is.portrait = FALSE)+
-#   tm_scale_bar(position = c("right", "bottom"),breaks=c(0,1,2,4) )+
-#   tm_compass(position = c("left", "top"), size=1.0)+
-#   tm_facets("type", ncol = 3) +
-#   tm_layout(asp = 1.5,
-#             legend.outside=TRUE, 
-#             legend.outside.position = "bottom",
-#             legend.position = c(0.2, 0.25),
-#             legend.title.size = 0.9)
-
-con_plots <- tm_shape(ham_taz_Vi_facet) +
-  tm_polygons("V_i_norm",
-              palette = c("red", "yellow", "darkgreen"),
-              style ="cont",
-              breaks=c(-0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, +2.2), 
-              label = c(">0.4%", "0.6%", "0.8%","1.0%", "1.2%","1.4%", "1.6%", "1.8%", "2.0%","<2.2%"),
-              title = glue_col("% of total potentially available job interactions in the region
-              *{sum(ham_taz_Vi_facet$`V_i`[which(ham_taz_Vi_facet$type == 'Relative Vi (binary)')], na.rm=T) |> round()} (Vi binary), {sum(ham_taz_Vi_facet$`V_i`[which(ham_taz_Vi_facet$type == 'Relative Vi (exponential)')], na.rm=T) |> round()} (Vi exp), and {sum(ham_taz_Vi_facet$`V_i`[which(ham_taz_Vi_facet$type == 'Relative Vi (gamma)')], na.rm=T) |> round()} (Vi gamma)"),
-              legend.is.portrait = FALSE)+
-  tm_scale_bar(position = c("right", "bottom"),breaks=c(0,1,2,4) )+
-  tm_compass(position = c("left", "top"), size=1.0)+
-  tm_facets("type", ncol = 3) +
-  tm_layout(asp = 1.5,
-            legend.outside=TRUE,
-            legend.outside.position = "bottom",
-            legend.position = c(0.2, 0.25),
-            legend.title.size = 0.9)
-```
-
-```{r}
-uncon_plots
-con_plots
+## References
 
 
-```
 
-Again, all the plots here represent spatially available opportunities using different impedance functions. Across all plots, again, the trends are similar though -less than in unconstrained accessibility - the intensity differs. The size matters of the parameters - less so the shape.
-(XXX)
-
-However, what's interesting is how different constrained accessibility looks like compared to the unconstrained plots. Areas with high values (1.8% or greater) are high in both plots, however, there are *more* areas of high values in the unconstrained plots. This is a result of competition. In the unconstrained plots, areas north-west have high values as a result of low impedance values and a high density of opportunities. The same is true in the constrained plots - in addition to a consideration for a neighbouring population demand that is relatively highly.
-
-However, in the constrains plots there are neighbourhoods with low unconstrained access but *high* constrained access. Why is this?
-Again! Because of competition. These areas have relatively low population demanding for opportunities and moderately low impedance values, both these factors results in high access values. 
-
-We can see common low values (red) across both sets of measures though - and that is north end of the city. There may be inequities here. These should be prioritized not areas that are red then green.
-
-## Concluding points: the important of using multiple-measures
-
-One tells you about the number of opportunities without considering comeptition - this may be appropriate .
-
-If competition is important, then the other mesasure is relevants.
-
-Ultimately, the accessibility values represent the number of jobs that could *potentially* be reached by from each origin.
-We should take action in increasing accessibility in areas that are yellow and red to reduce inequities of access.
-But by using constrained accessibility measures - we can see that not all yellow and red areas *have* low accessibility.
-They may have relatively fine accessibility given their neighbouring demand for opportunities.
-
-Access to opportunities is a multi-faceted concept.
-The use of multiple indicators can illuminate spatial patterns of inequities and add another layer of confidence to the quantitative analysis.
-But our journey is not done. Once these spatial inequities have been identified - what do we do about it?
-This is a question that plagues planners, making accessibility measures hard to operationalize.
-
-Because of the proportional allocation features of spatial availability - it can be used to plan for how much spatial availability is needed in each neighbourhood. This, along with equity conceptualizations, willl be explored in a following post.
-
-Openness is legitimacy.
-This blog post was written in a R environment and can be fully reproduced.
-If interested, see the open access PDF of the full article (which includes the mathematical formulation for the spatial availability function) in the references [@soukhovIntroducingSpatialAvailability2023].
-The data used in this post is a subset of data from {TTS2016R}, the plots are created using {tmap}, and spatial objects are manipulated using {sf}, along with base {R} functions.
-
-All the code and text in this post is available in this GitHub repository ([here](URLLL)).
-
-```{=html}
-<!-- 
-Rejected text
-
-The accessibility score in the plot above was calculated using the popular cumulative accessibility measure. This measure is one of many variations of the widely-used measure first proposed by [@hansen1959]. Hansen's measure is commonly referred to as a gravity-based accessibility measure and since then has seen countless iterations. At the core of cumulative Geographical context matters so the measure is tweaked to fit the context. This gravity-measure can be considered as an 'unconstrained' measure that counts the number of opportunities that can be reached metered by a distance-decay function. A distance decay function -->
-```
-<!-- Cumulative opportunity accessible measures simplifies the distance-decay function by setting a travel threshold (i.e., only count all the opportunities that can be reached within 1 km, for example). Cumulative opportunity measures are more simply to implement, and correlates highly (when the correct travel threshold is selected) with empirically observed travel distance impedance function. -->
-
-<!-- **graph of cumulative opportunities vs. travel distance impedance function** -->
-
-<!-- But what about opportunities when counting ALL the potential interaction doesn't make sense? For instance, I live in Toronto. In my neighbourhood I have transit-access to 10,000 potential jobs. But I also live near 20,000 people who can access these same jobs. What does that mean for me? Jobs or other exclusive opportunity-types are an excellent case to use competitive accessibility measure. These measures include floating catchment approaches (FCA) that meter demand for opportunities (all my neighbours in my neighbourhood) with supply of opportunities (all the jobs in my neighbourhood). -->
-
-<!-- **map of neighbourhood I live in Toronto, accessibility vs. spatial availability** -->
-
-<!-- This is where spatial availability comes in. If considering gravity-based measures as 'unconstrained' accessibility, spatial availability is 'constrained' accessibility. It measures the potential of interaction, but meters the count of interaction by the neighbourhood demand for reachable opportunities. Similar to a destination-constrained spatial interaction model, the spatial availability 'value' is the number of opportunities available to each origin. There is an availability value for each origin, and it is proportion of the total opportunities in the region allocated based on the demand from each origin (population-based demand relative to the amount of opportunity-seeking population in all origins) and the travel cost from each origin (relative to travel distance to the opportunities from all origins). Balancing factors What makes spatial availability also interesting...? Because it proportionally constrains the opportunities in the region and assigned a proportional value to each origin, it can be divided by population at that origin. This can be interpreted as an opportunity per capita value. This value can be used as a benchmark to compare again opportunity per capita across areas of the region and between regions. For instance, Hamilton has more opportunities per capita available that Toronto -->
-
-<!-- **map of neighbourhood I live in Toronto, accessibility vs. spatial availability** -->
-
-```{r}
-# # plot of workers and jobs... just descriptive.
-# workers_tm <- tm_shape(ggh_taz |> filter(PD == 46)) +
-#   tm_polygons(col = "workers") 
-# jobs_tm <- tm_shape(ggh_taz |> filter(PD == 46)) +
-#   tm_polygons(col = "jobs") 
-# 
-# tmap_arrange(cum_tm, workers_tm, jobs_tm, ncol = 2)
-```
 
 

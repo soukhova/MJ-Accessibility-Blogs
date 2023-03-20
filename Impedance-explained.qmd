@@ -168,7 +168,7 @@ $$ {#eq-binary-access}
 
 Next, three more complex impedance $f(c_{ij})$ functions are shown: these functions are [_probability density functions_](https://en.wikipedia.org/wiki/Probability_density_function) (PDF). In conceptualizing $f(c_{ij})$ as forms of PDF, the $f(c_ij)$ values (the probability density value along the y-axis) can be interpreted as the _relative liklihood_ of a trip occurring for each value of $c_ij$. The probability of a trip between a certain range of $c_ij$ is the area under the curve (the area under a PDF always equals to 1, i.e., 100% probability that the trip between the minimum and maximum $c_ij$ will occur). Let's go over three examples of commonly used theoretical PDFs in accessibility impedance functions.
 
-The first can be seen as a binary function (like shown in (@eq-binary-access)) as it can only equal one of two values. However, whatever two values are selected must ensure that the area under the curve for the range of $c_ij$ is kept at 1. In this way, the binary function is equal to the theoretical _uniform density function_ shown in (@eq-uniform-imped). The parameters which the analyst chooses are $T_{max}$ and $T_{min}$: they equal the maximum and minimum travel cost (i.e., the range) it is assumed that a trip occurs. Outside of this range, the trip does not occur (the relative liklihood is assigned a zero). 
+The first can be seen as a type of function (like shown in (@eq-binary-access)) as it can only equal one of two values. However, whatever two values are selected must ensure that the area under the curve for the range of $c_ij$ is kept at 1. In this way, the binary function is equal to the theoretical _uniform density function_ shown in (@eq-uniform-imped). The parameters which the analyst chooses are $T_{max}$ and $T_{min}$: they equal the maximum and minimum travel cost (i.e., the range) it is assumed that a trip occurs. Outside of this range, the trip does not occur (the relative liklihood is assigned a zero). 
 
 $$
 f(c_{ij})^* =
@@ -178,7 +178,7 @@ f(c_{ij})^* =
  \end{cases}       
 $${#eq-uniform-imped}
 
-The next two functions are the exponential density function and the gamma density function (part of the exponential function facilities but utilizes the gamma function $\Gamma(\alpha)$). The general form of these two functions are shown in the following (@eq-exp-imped) and (@eq-gamma-imped). The analyst selects parameters for these functions represented by $\lambda$ (exponential) and $\alpha$ and $\sigma$ (gamma). Unlike the binary function (@eq-binary-access), these two functions can take a value of _relative liklihood_ from 0 to approaching infinity for all positive $c_{ij}$, where the range depends on the analyst-defined parameters.
+The next two functions are the exponential density function and the gamma density function (part of the exponential function facilities but utilizes the gamma function $\Gamma(\alpha)$). The general form of these two functions are shown in the following (@eq-exp-imped) and (@eq-gamma-imped). The analyst selects parameters for these functions represented by $\lambda$ (exponential) and $\alpha$ and $\sigma$ (gamma). These two functions can take a value of _relative liklihood_ from 0 to approaching infinity for all positive $c_{ij}$, where the range depends on the analyst-defined parameters.
 
 $$
 f(c_{ij}, \beta)^{**} = 
@@ -275,7 +275,7 @@ exp_ <- fitdistrplus::fitdist(data=all_tt, "exp", method="mme", optim.method="Ne
 # ks.test(data, "pgamma", shape = 1.60289258, rate = 0.08911374)
 ```
 
--   Binary function ($f(c_{ij})^*$ - red): $T_{min}$ and $T_{max}$ is 0 and `r unif_$estimate[2] |> prettyNum(digits=1)` mins, respectively.
+-   Uniform function ($f(c_{ij})^*$ - red): $T_{min}$ and $T_{max}$ is 0 and `r unif_$estimate[2] |> prettyNum(digits=1)` mins, respectively.
 
 -   Exponential function ($f(c_{ij})^{**}$ - green)\*: $\beta$ (rate) is `r exp_$estimate |> prettyNum(digits=1)`
 
@@ -287,7 +287,7 @@ exp_ <- fitdistrplus::fitdist(data=all_tt, "exp", method="mme", optim.method="Ne
 
 travel_costs <- unique(od$travel_time)
 
-fit_binary <- data.frame(f = dunif(travel_costs, min=0, max=unif_$estimate[2]), #already scaled from 1 to 0
+fit_unif <- data.frame(f = dunif(travel_costs, min=0, max=unif_$estimate[2]), #already scaled from 1 to 0
                          x = travel_costs,
                          type = "Uniform (Eq. 3)")
 fit_dexp <- data.frame(f = dexp(travel_costs, rate = exp_$estimate), #|> scales::rescale(),
@@ -310,7 +310,7 @@ ggplot(data = TLDs) + geom_line(aes(x=x, y=f, color=type), size=0.6) +
     scale_x_continuous(expand = c(0, 0), limits = c(0, 88)) +
   theme_classic() +
   scale_color_manual(name = "Functions",
-                     values = c("Red", "grey30", "Green", "Blue")) +
+                     values = c("grey30", "Green", "Blue", "Red")) +
   xlab(bquote(c[ij])) +
   ylab(bquote(f(c[ij])))
 ```
