@@ -1,0 +1,13 @@
+name: Impedance-explained-shiny-app
+title: Impedance-explained-shiny-app
+username:
+account: soukhova
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 8605206
+bundleId: 6976530
+url: https://soukhova.shinyapps.io/Impedance-explained-shiny-app/
+when: 1679168460.20927
+lastSyncTime: 1679168460.20927
+asMultiple: FALSE
+asStatic: FALSE
