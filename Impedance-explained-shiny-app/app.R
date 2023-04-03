@@ -46,13 +46,13 @@ ui <- shinyUI(pageWithSidebar(
                 min=0,
                 max=5,
                 value=1.6,
-                step=0.1),
+                step=0.05),
     sliderInput("scale2",
                 "Scale parameter (gamma):",
                 min=0,
                 max=1,
                 value=0.1,
-                step=0.1)
+                step=0.05)
   ),
   
   # GGPLOT
