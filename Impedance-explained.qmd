@@ -124,7 +124,7 @@ od <- od |>
 #keeping only trips originating from Hamilton IDs (the planning district of Hamilton)
 ham_o_ids <- ggh_taz |> filter(PD == 46) |> data.frame() |> transmute(GTA06, AREA) #list of hamilton IDs
 
-od_HAM_origin <- od |> filter(Origin %in% ham_o_ids$GTA06) #only keeping od trips that originate within Hamilton
+od_HAM_origin <- od |> filter(Origin %in% ham_o_ids$GTA06 & Destination %in% ham_o_ids$GTA06) #only keeping od trips that originate within Hamilton (edit AND trips that finish in Hamilton)
 ```
 
 ```{r exploring-traveltimes-hamilton, include=FALSE}
@@ -140,7 +140,7 @@ Applying accessibility analysis to planning questions is appealing as it is a ho
 
 Needless to say, accessibility analysis can be an important component when planning for equitable transportation and service provision.
 
-This blog post is the first of a series of three posts that present accessibility analysis for planning applications. The series will walk readers through the components of accessibility analysis as well as its potential uses when planning for equity. This post explores how travel behavior enters accessibility measures through the _impedance function_, the implications of travel behaviour assumptions and how one may select parameters for these assumptions. In the subsequent posts, I plan to discuss how these assumptions about travel behavior impact accessibility analysis outputs, different types of accessibility measures, and centering equity and justice conceptualizations in accessibility analysis.
+This blog post is the first of a series of posts that present accessibility analysis for planning applications. The series will walk readers through the components of accessibility analysis as well as its potential uses when planning for equity. This post explores how travel behavior enters accessibility measures through the _impedance function_, the implications of travel behaviour assumptions and how one may select parameters for these assumptions. In the subsequent posts, I plan to discuss how these assumptions about travel behavior impact accessibility analysis outputs, different types of accessibility measures, and centering equity and justice conceptualizations in accessibility analysis.
 
 ## Counting opportunities based on travel behaviour assumptions
 
@@ -175,7 +175,7 @@ $$ {#eq-binary-access}
 
 Threshold $T$ should be selected carefully to reflect the observed or assumed travel behavior for the situation of interest. For instance, assume the travel cost is in the units of car travel minutes. Does only counting the potential interaction opportunities for the population in a region accessing destinations within a 0 to 15 minute range (the travel cost) make sense for the context of accessibility analysis? If yes, then the threshold $T$ in this function would be 15. This means that the opportunities that can be reached by the population will only be counted if those opportunities can be reached within 15 minutes, if not, they are not counted at all (assigned a value of 0) in the accessibility measure (@eq-hansen-access). 
 
-Three more commonly used forms of impedance $f(c_{ij})$ functions in accessibility analysis are important to consider: these functions should be interpreted differently than the binary function (@eq-binary-access) as they are all theoretical [_probability density functions_](https://en.wikipedia.org/wiki/Probability_density_function) (PDF). In conceptualizing the impedance function $f(c_{ij})$ as forms of PDF, the $f(c_{ij})$ values can be interpreted as the _probability density_ of a trip occurring for each value of $c_{ij}$. If probability values are plotted on the y-axis for each travel cost along the x-axis, the probability of a trip occuring between a certain range of $c_{ij}$ is the area under the curve. Important to note is that the area under a PDF always sums to 1, i.e., 100% probability that the trip between the minimum and maximum $c_{ij}$ will occur. 
+Three more commonly used forms of impedance $f(c_{ij})$ functions in accessibility analysis are important to consider: these functions should be interpreted differently than the binary function (@eq-binary-access) as they are all theoretical [_probability density functions_](https://en.wikipedia.org/wiki/Probability_density_function) (PDF). In conceptualizing the impedance function $f(c_{ij})$ as forms of PDF, the $f(c_{ij})$ values can be interpreted as the _probability density_ of a trip occurring for each value of $c_{ij}$. If probability values are plotted on the y-axis for each travel cost along the x-axis, the probability of a trip occurring between a certain range of $c_{ij}$ is the area under the curve. Important to note is that the area under a PDF always sums to 1, i.e., 100% probability that the trip between the minimum and maximum $c_{ij}$ will occur. 
 
 The **uniform distribution** PDF looks very similar to the binary function (shown in (@eq-binary-access)), as it only returns one of two values. However, it also has the property of PDFs - the area under the curve for the range of $c_{ij}$ is always 1 (i,e., 100% probability that the trip between the minimum and maximum $c_{ij}$ will occur). The general form for the uniform distribution PDF is shown in (@eq-uniform-imped). The parameters that the analyst chooses are $T_{max}$ and $T_{min}$: these represent the maximum and minimum travel costs (i.e., the range) that describe the observed or assumed willingness to reach destinations. If the trip is of a travel cost that is within this range, it returns a value of $\frac{1}{T_{max} - T_{min}}$). Outside of this range, the function can be interpreted to assume that the potential for interaction is zero so the function returns a 0 for trips of those travel costs.
 
@@ -209,7 +209,7 @@ For the **exponential distribution**, the probability of a trip occurring is alw
 
 Binary travel cost thresholds may not make sense in some applications: for instance, is it true that in a hypothetical example, no trips occur beyond 15 travel cost units for a region, population and opportunities of interest? Is this a fair assumption to make about the travel behaviour? Maybe it is more fair to say that the probability of a trip occurring decreases as the travel cost increases in an exponentially decaying way (as informed by the $\lambda$ parameter). In this case, it would be worth while considering the exponential distribution instead of the uniform distribution.
 
-Unlike the exponential distribution, the probability of a trip occurring is not always highest at the lowest value of travel cost $c_{ij}$ for the **gamma distribution**. In fact, for the **gamma distribution** the probability is often low at the low costs, higher at mid costs, and low again at high costs. The $\sigma$ and $\alpha$ parameters controls the scale and shape of the gamma curve, like $\lambda$ controls the rate of the exponential curve. The higher the $\sigma$ (scale) parameter, the higher the probability of the majority of trips occurring within a low travel cost range. So at low $\sigma$ (scale) parameter values, the same probability is spread across a larger range of travel costs. For the $\alpha$ (shape) parameter, the higher value, the higher the probability density of trips with a higher mean travel cost.
+Unlike the exponential distribution, the probability of a trip occurring is not always highest at the lowest value of travel cost $c_{ij}$ for the **gamma distribution**. In fact, for the **gamma distribution** the probability is often low at the low costs, higher at mid-costs, and low again at high costs. The $\sigma$ and $\alpha$ parameters controls the rate and shape of the gamma curve, like $\lambda$ controls the rate of the exponential curve. The higher the $\sigma$ (gamma rate) parameter, the higher the probability of the majority of trips occurring within a low travel cost range. So at low $\sigma$ (gamma rate) parameter values, the same probability is spread across a larger range of travel costs. For the $\alpha$ (shape) parameter, the higher value, the higher the probability density of trips with a higher mean travel cost.
 
 Values for both $\sigma$ and $\alpha$ are used in the gamma distribution, so it is more complex in formulation than the exponential. However, the gamma may be more useful in modelling specific travel behaviour. Namely, if the population's travel behaviour is less likely to occur at short travel times, more likely at mid-range travel times, and less likely at long travel times, the gamma distribution can be calibrated to match this pattern. For instance, this form of travel behaviour can occur within observed home-to-work commutes from predominately single-use zoned regions: trips are less likely to occur at short travel times for a region (as a result of single-use residential zoning), are more likely at mid-range travel costs (commuting to a central business district), and less likely at long travel costs (few super-commuters). Representing this travel behaviour pattern cannot be accurately captured by the exponential distribution as short travel times _should_ have a low values of $f(c_{ij})$. Additionally, the use of the uniform distribution may be inaccurate in this situation as it requires the analyst to select min. and max. travel cost thresholds such that the opportunities that short- and long- travelling population potentially interactions is not counted (i.e., returns value of 0). The analyst must ask themselves if it make sense to not count the potential opportunities that can be reached by the  _few_, but still occurring, short- and long- travel cost trips.
 
@@ -219,7 +219,7 @@ In summary, these three discussed PDFs $f_(c_{ij})$ can take a value of probabil
 
 In all the impedance function forms presented, the analyst must define the parameters. A useful technique to calibrate the parameters is by using empirically observed origin-to-destination (OD) travel data. This empirical data can be used to build a trip length distribution (TLD). The TLD is the _empirical_ PDF of the travel costs associated with the OD trips. In other words, this distribution reflects observed travel patterns: we can use the TLD to tell us how likely an observed trip of a certain travel cost is to occur for the population and region of interest. Based on this TLD, we can select the best fitting theoretical PDF form (e.g., uniform, exponential, gamma), fit the associated parameters (e.g., $T_{min}$ & $T_{max$, $\lambda$, or $\sigma$ & $\alpha$) and use the calibrated theoretical PDF to carry the assumptions about travel behaviour into the accessibility calculation.
 
-Below I demonstrate an overview of calibrating a PDF for a sample of empirical home-to-work flows from Hamilton Center from the R data package [{TTS2016R}](https://soukhova.github.io/TTS2016R/) [@TTS2016r]. The flows are taken at the spatial unit of traffic analysis zones (TAZ). This package contains a subset of home-to-work flows the 2016 Transportation Tomorrow Survey (TTS) as well as calculated road-network car travel times (calculated using [{r5r}](https://doi.org/10.32866/001c.21262) [@r5r_2021]). {TTS2016R} is detailed in this publication [@soukhovTTS2016RDataSet2023] and is freely available [here](https://soukhova.github.io/TTS2016R/). 
+Below I demonstrate an overview of calibrating a PDF for a sample of empirical home-to-work flows taken from workers who live and work within Hamilton Center from the R data package [{TTS2016R}](https://soukhova.github.io/TTS2016R/) [@TTS2016r]. The flows are taken at the spatial unit of traffic analysis zones (TAZ). This package contains a subset of home-to-work flows the 2016 Transportation Tomorrow Survey (TTS) as well as calculated road-network car travel times (calculated using [{r5r}](https://doi.org/10.32866/001c.21262) [@r5r_2021]). {TTS2016R} is detailed in this publication [@soukhovTTS2016RDataSet2023] and is freely available [here](https://soukhova.github.io/TTS2016R/). 
 
 The TLD for this empirical data is shown in black in the plot below (@fig-TLD-empirical):
 
@@ -240,11 +240,13 @@ empirical <- data.frame(f = empirical_y,
                         type = "Empirical")
 
 plot_empirical_TLD <- ggplot(data = empirical) + geom_line(aes(x=x, y=f), color="grey30") + 
-  scale_x_continuous(expand = c(0, 0), limits = c(0, 88)) +
+  scale_x_continuous(expand = c(0, 0), limits = c(0, 40)) +
   theme_classic() +
   theme(legend.position  = "none") +
   xlab(bquote(c[ij])) +
   ylab(bquote(f(c[ij])))
+
+plot_empirical_TLD
 
 ggsave("Impedance-explained_files/1_plot_empirical_TLD.png")
 
@@ -252,7 +254,7 @@ ggsave("Impedance-explained_files/1_plot_empirical_TLD.png")
 red_empirical <- empirical |> filter (x <= 45)
 ```
 
-As explained, the TLD is the _empirical_ PDF of the travel costs associated with the OD trips. Like all PDFs, the y-axis represents the probability density of the value at the x-axis of occurring. In our example, $f(c_{ij})$ is the probability density of a trip at a given travel cost in minutes of travel, $c_{ij}$. It can be observed that the probability density of travelling is highest when travel time is around `r empirical |> filter(f == max(f)) |> pull(x) |> prettyNum(digits=2)` minutes. It can also be seen that around the 45 min mark, the probability density levels off. In other words, the probability of a trip of length 0 to 45 mins occurring is `r sum(diff(sort(red_empirical$x)) * 0.5 * (red_empirical$f[-1] + head(red_empirical$f, -1))) |> scales::percent()`. Trips outside of this range make up the remaining probability. 
+As explained, the TLD is the _empirical_ PDF of the travel costs associated with the OD trips. Like all PDFs, the y-axis represents the probability density of the value at the x-axis of occurring. In our example, $f(c_{ij})$ is the probability density of a trip at a given travel cost in minutes of travel, $c_{ij}$. It can be observed that the probability density of travelling is highest when travel time is around `r empirical |> filter(f == max(f)) |> pull(x) |> prettyNum(digits=2)` minutes. It can also be seen that around the 20 min mark, the probability density levels off. In other words, the probability of a trip of length 0 to 20 mins occurring is `r sum(diff(sort(red_empirical$x)) * 0.5 * (red_empirical$f[-1] + head(red_empirical$f, -1))) |> scales::percent()`. Trips outside of this range make up the remaining probability. 
 
 Now let's fit the parameters of the uniform, exponential, and gamma functions (@eq-uniform-imped, @eq-exp-imped, @eq-gamma-imped) as closely to the TLD captured in @fig-TLD-empirical above. The R package {{fitdistrplus}](https://cloud.r-project.org/web/packages/fitdistrplus/index.html) was used to generate parameters that best-fit the TLD: the moments matching estimation (MME) fitting-method and the Nelder-Mead direct optimization algorithms are used [@Muller2016]. The default values for all three functions are summarized in the following, but if interest in the replicating and reproducing these results, see the R code in the Quatro document within this [GitHub repository](https://github.com/soukhova/MJ-Accessibility-Blogs/Impedance-explained.qmd). 
 
@@ -280,7 +282,7 @@ exp_ <- fitdistrplus::fitdist(data=all_tt, "exp", method="mme", optim.method="Ne
 
 -   Exponential function ($f(c_{ij})^{exponential}$ - green)\*: $\beta$ (rate) is `r exp_$estimate |> prettyNum(digits=1)`
 
--   Gamma function ($f(c_{ij})^{gamma}$ - blue)\*: $\alpha$ (shape) is `r gamma_$estimate[1] |> prettyNum(digits=1)` and $\beta$ (rate) is `r gamma_$estimate[2] |> prettyNum(digits=1)`
+-   Gamma function ($f(c_{ij})^{gamma}$ - blue)\*: $\alpha$ (shape) is `r gamma_$estimate[1] |> prettyNum(digits=1)` and $\sigma$ (rate) is `r gamma_$estimate[2] |> prettyNum(digits=1)`
 
 ```{r plotting-impedance-functions}
 #| label: fig-TLD-all
@@ -308,19 +310,20 @@ empirical <- data.frame(f = empirical_y,
 TLDs <- rbind(fit_unif, fit_dexp, fit_dgamma, empirical)
 
 ggplot(data = TLDs) + geom_line(aes(x=x, y=f, color=type), size=0.6) + 
-    scale_x_continuous(expand = c(0, 0), limits = c(0, 88)) +
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 40)) +
   theme_classic() +
   scale_color_manual(name = "Functions",
                      values = c("grey30", "Green", "Blue", "Red")) +
   xlab(bquote(c[ij])) +
-  ylab(bquote(f(c[ij])))
+  ylab(bquote(f(c[ij]))) +
+  theme(legend.position = c(0.9, 0.8))
 
 ggsave("Impedance-explained_files/2_plot_all_PDFs.png")
 ```
 
 Functions in @fig-TLD-all can be interpreted in the following way: the higher the $f(c_{ij})$, the higher the probability density of travelling to reach the opportunities at the destination.^[Using {fitdistrplus}, the parameters in all theoretical functions were selected through an optimization algorithm that minimizes the differences between all possible parameter range(s) and the empirical function for each theoretical function.]
 
-The uniform impedance function (red), when implemented into an accessibility calculation, would assume that the population is indifferent to _changes_ in travel cost. The population at an origin is assumed to either totally interact with an opportunity (if it's a trip between 0 to 45 minutes - the $T$ thresholds) or not interact at all. 
+The uniform impedance function (red), when implemented into an accessibility calculation, would assume that the population is indifferent to _changes_ in travel cost. The population at an origin is assumed to either totally interact with an opportunity (if it's a trip between 0 to 19 minutes - the $T$ thresholds) or not interact at all. 
 
 If the above exponential or gamma function was implemented in an accessibility calculation, then the analyst is assuming the population is much more sensitive to changes in travel cost. However, the exponential and gamma functions are quite a different shape so they depict a different response to the probability of traveling given a travel cost $c_{ij}$. 
 
