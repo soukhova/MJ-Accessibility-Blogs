@@ -1,0 +1,51 @@
+\documentclass[12pt, oneside]{report}
+
+% Inputs the Document Packages
+\usepackage{array}
+\usepackage{blindtext}
+\usepackage[
+    citestyle=verbose-ibid,
+    bibstyle=authoryear,
+    autocite=footnote,
+    notetype=endonly,
+    backend=biber,
+    isbn=false, 
+    doi=false,
+    labeldateparts
+]{biblatex}
+\usepackage{booktabs}
+\usepackage{ctable}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{hyperref}
+%\usepackage[hidelinks]{hyperref}
+\usepackage[utf8]{inputenc}
+\usepackage{mobilizing-justice}
+\usepackage{multicol}
+\usepackage{pdfpages}
+% Change font size
+\usepackage{relsize}
+\usepackage{setspace}
+\usepackage{subfig}
+\usepackage{tcolorbox}
+\tcbuselibrary{theorems}
+\usepackage{wrapfig}
+
+
+% Pointing to a bib resource here
+\addbibresource[label=main]{$bibliography$} % REPLACE WITH WORKS CITED BIB FILE
+
+% Remove URL and DOI for cleaner citations (optional, obviously)
+\AtEveryBibitem{
+    \clearfield{url}
+    \clearfield{doi}
+}
+
+\let\oldheadrule\headrule% Copy \headrule into \oldheadrule
+\renewcommand{\headrule}{\color{Maroon}\oldheadrule}% Add colour to \headrule
+\renewcommand{\headrulewidth}{12.5pt}
+
+% HERE GOES THE TITLE FOR THE DOCUMENT
+$if(title)$
+  \title{$title$}
+$endif$

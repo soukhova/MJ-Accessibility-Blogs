@@ -1,0 +1,957 @@
+---
+title: "Accessibility analysis for planning applications"
+subtitle: "Accessibility analysis for planning applications"
+format:
+  mj-report-pdf: 
+    keep-tex: true
+doctype: "Tools and guidelines report"
+
+# Author information. You can add or delete authors here
+author:
+  - name:
+      given: Anastasia
+      family: Soukhov
+    affiliations: 
+      - name: McMaster University
+        department: School of Earth, Environment and Society
+    email: soukhoa@mcmaster.ca
+  - name:
+      given: Antonio
+      family: Páez
+    affiliations:
+      - name: McMaster University
+        department: School of Earth, Environment and Society
+    email: paezha@mcmaster.ca
+# Date: default is last modified but could be a string.  
+date: last-modified
+
+# Place the cover image and the toc image in folder `images`
+cover_image: potential-access-cover-image.jpeg
+cover_image_caption: "Microsoft Bing AI generated image using prompt \"potential access analysis for city planning applications\" on December 1 2023; food for thought"
+toc_image: toronto-ped-car-toc-pic.png
+toc_image_caption: "View of sidewalks, pedestrian bridge, underground parking entrance, construction and cityscape. Photo taken in downtown Toronto, October 2023 by Anastasia Soukhov."
+# Information for generating citation
+citation:
+  type: report
+  # doi: "10.23915/reprodocs.00010"
+  issued: last-modified
+  url: https://github.com/soukhova/MJ-Accessibility-Blogs
+  number: "MJ-0002"
+bibliography: bibliography.bib
+---
+# Executive summary
+
+This report presents accessibility analysis for planning applications: it walks readers through the components of accessibility analysis as well as its potential uses when planning for equity. 
+
+The first section explores how travel behaviour enters accessibility measures through the _impedance function_, the implications of travel behaviour assumptions and how analysts may select parameters for these assumptions. 
+
+In the second section, two types of accessibility measures, *unconstrained* and *constrained*, are defined and presented in an empirical example. The distinction in the interpretation between the output from both types of measures are clearly described. 
+
+In subsequent sections, how to center equity and justice conceptualizations in accessibility analysis will be explored.
+
+\newpage
+# Part I: Impedance functions {#sec-partI}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r library-setup}
+library(TTS2016R) # An augmented 2016 Transportation Tomorrow Survey (TTS) data package: worker and place of employment counts, trips and estimated travel time to work in the Greater Golden Horsehoe area, Canada
+library(sf) # Simple Features for R
+library(ggplot2) # Create Elegant Data Visualisations Using the Grammar of Graphics
+# library(tmap)
+library(dplyr)# A Grammar of Data Manipulation 
+
+library(accessibility) # Transport Accessibility Measures
+library(dplyr) # A Grammar of Data Manipulation
+library(glue) # Interpreted String Literals
+library(tidyr)
+library(tmap) # Thematic Maps
+```
+
+```{r import-data}
+ggh_pd <- TTS2016R::ggh_pd
+ggh_pd <- st_buffer(ggh_pd, dist=0)
+ggh_taz <- TTS2016R::ggh_taz
+ggh_taz <- st_buffer(ggh_taz, dist=0)
+ggh_taz <-  st_join(ggh_taz, ggh_pd |> transmute(PD),left = TRUE, largest = TRUE) #adding PD, we want to only visualize Hamilton PD 1
+
+street <- read_sf("data/Street_Centreline.shp") |> filter(ROAD_CLASS == "Provincial Highway" | ROAD_CLASS == "Parkway" )
+
+# drop travel times that have destinations
+od  <- TTS2016R::od |> filter( !is.na(travel_time)) |> 
+  mutate(travel_time = as.integer(ifelse(Destination == 9998 | Destination == 8888 | Origin == 9998 | Origin == 8888 
+                                         | Destination >= 9000 | Origin >= 9000, NA, travel_time)))
+od <- od |> 
+  na.omit() #omitting rows with NA travel times - these are trips that happen to outside and/or unknown destinations.
+```
+
+```{r intra-zonal-travel-time-est-1, include=FALSE}
+# Imputing intra-zonal travel time. The proposed procedure is as follows:
+# 1. Calculate the inter-zonal distances using the zone centroids as reference
+# 2. Calculate the square root of the area of the zones; this is a proxy for the typical distance within the zone
+# 3. Model the inter-zonal travel times as a function of inter-zonal distances; This gives a relationship distance-to-time t = f(d)
+# 4. Use the model to estimate (i.e., impute) the travel time
+
+# Retrieve the centroids of the TAZ
+taz_centroids <- ggh_taz |>
+  st_centroid()
+
+# Calculate the inter-centroid distances
+taz_dist <- st_distance(taz_centroids,
+                        taz_centroids) |>
+  matrix(ncol = 1, byrow = FALSE)
+
+# Create a data frame with the origin destination ids and the distances
+taz_dist <- cbind(expand.grid(Destination = taz_centroids$GTA06, 
+                              Origin = taz_centroids$GTA06),
+                  taz_dist) |>
+  select(Origin, Destination, taz_dist)
+
+# Sanity check: make sure that the distances were assigned correctly to origin-destination pairs
+st_distance(taz_centroids |> filter(GTA06 == "1"), 
+            taz_centroids |> filter(GTA06 == "100"))
+
+# Join the intra-zonal distances to the od table
+od <- od |>
+  left_join(taz_dist,
+            by = c("Origin", "Destination"))
+
+# Sanity check: make sure that the distances were assigned correctly to origin-destination pairs
+st_distance(taz_centroids |> filter(GTA06 == "1"), 
+            taz_centroids |> filter(GTA06 == "21"))
+```
+
+```{r intra-zonal-travel-time-est-2}
+# Join area of zone
+od <- od |> 
+  left_join(ggh_taz |> 
+              st_drop_geometry() |> 
+              transmute(GTA06,
+                        PD, 
+                        AREA), 
+            by = c("Origin" = "GTA06"))
+
+# Calculate the square root of the area of all zones; this is a proxy of the intra-zonal distance; note that the area is in sq.km so convert to meters. The inter-zonal distances are in m.
+od <- od |>
+  mutate(sqrt_area = ifelse(Origin == Destination, sqrt(AREA * 1000000), NA))
+
+# Check the summary statistics of the sqrt of AREA to find the maximum distance that we wish to model
+# summary(od$sqrt_area)
+```
+
+```{r intra-zonal-travel-time-est-3, include=FALSE}
+# Estimate a model to correlate distance to travel time
+zonal_time_mod <- lm(travel_time ~ taz_dist,   
+                     data = od |>
+                       filter(Origin != Destination,
+                              taz_dist < 24000))
+
+ggplot(data = od |>
+         filter(Origin != Destination,
+                taz_dist < 24000),
+       aes(x = taz_dist,
+           y = travel_time)) +
+  geom_point(alpha = 0.2) +
+  geom_abline(intercept = zonal_time_mod$coefficients[1], 
+              slope = zonal_time_mod$coefficients[2],
+              color = "red")
+```
+
+```{r intra-zonal-travel-time-est-4}
+# Impute intrazonal travel times
+od <- od |>
+  mutate(travel_time = ifelse(Origin == Destination, 
+                              # If intra-zonal (i.e., origin == destination) use model to impute travel time
+                              zonal_time_mod$coefficients[1] + zonal_time_mod$coefficients[2] * sqrt_area,
+                              # Else use the travel time already in the table
+                              travel_time))
+```
+
+```{r select-hamilton-origins}
+#keeping only trips originating from Hamilton IDs (the planning district of Hamilton)
+ham_o_ids <- ggh_taz |> filter(PD >= 41 & PD <= 46) |> data.frame() |> transmute(GTA06, AREA) #list of hamilton IDs
+
+od_HAM_origin <- od |> filter(Origin %in% ham_o_ids$GTA06 & Destination %in% ham_o_ids$GTA06) #only keeping od trips that originate within Hamilton (AND trips that finish in Hamilton)
+```
+
+```{r exploring-traveltimes-hamilton, include=FALSE}
+#this is just to explore how the area relates to travel time... better than just assigning all to the 25th quantile I guess!.
+ggplot(od_HAM_origin |> filter(travel_time <= 20), aes(x=travel_time, y=AREA)) + geom_point()
+```
+
+**Accessibility** has many definitions. Within the context of transportation planning literature and practice, it is often a location-based measure of *potential interaction*. Specifically, accessibility quantifies the potential a "population" has to reach "opportunities" in a given region based on their means of transportation. Reaching an opportunity is the pre-requisite to interaction. 
+
+The "population" are people or activities at some origin in space and time: they can be individuals employed at a type of job, children of a certain age group or other characteristic, or simply _all people_ or some other type of opportunity-seeking activity (like a business) that reside at some origin. The "opportunities" are the type of destinations that the "population" interacts with, and the definition of its selection is as critical and numerous as the selection of "population". Further, modes (e.g., walking, transit), time of travel, quality of route taken, and quality of "opportunities" are among many factors that can be considered within accessibility measures.
+
+<!--Therefore, the selection of "population", "opportunity" and relevant transport-system factors should be characterized by the research motivation. When measuring accessibility, to what opportunities are we interested in? For whom (the population and modes of interest)? When and when (the spatial and temporal context)? How (the accessibility methods used)? and Why (the research)?-->
+The output from accessibility measures are typically a value or scaled score that is assigned to each spatial unit (e.g., a census tract, neighbourhood boundary, parcel, etc.). This output provides a snapshot of the relationship between land-use and transportation in the region: areas with high scores are relatively well-connected and are in proximity to plenty of opportunities. The opposite is true for areas with low accessibility. Accessibility analysis can be used by planners to identify priority areas for transportation and improvements in "opportunities".
+
+This section explores how travel behaviour enters accessibility measures through the _impedance function_, the implications of travel behaviour assumptions and how one may select parameters for these assumptions. 
+
+## Counting opportunities based on travel behaviour assumptions
+
+Many accessibility measures derive from the work of [@hansen1959] represented in (@eq-hansen-access):
+
+$$
+S_i = \sum_{j=1}^JO_j \cdot f(c_{ij})
+$$ {#eq-hansen-access}
+
+The accessibility score $S_i$ at each origin $i$ is a weighted sum of the number of opportunities $O$ at destinations $j$, where $i$ and $j$ are a set of spatial units in a region. The weights in this summation are a function of the cost of travel $f(c_{ij})$, sometimes called a distance-decay function. $f(c_{ij})$ reflects how the potential for interaction changes with the cost of travel $c_{ij}$ between spatial units $i$ and $j$, that is the origin and destination of a potential trip. 
+
+The cost $c_{ij}$ can be distance, time, financial cost, or a combination of several factors. Since distance is not always the unit of travel cost, $f(c_{ij})$ is also known more generally as an _impedance function_ since the function models the impedance of travel. Generally, $f(c_{ij})$ declines with growing travel cost (the impedance is greater), and so opportunities $O_j$ at destinations that are less costly to reach are more heavily weighted in the summation that yields $A_i$. Conversely, opportunities $O_j$ that are costly to reach (i.e., they are *far* away in terms of travel cost) have values of $f(c_{ij})$ that are close to or equal to zero, so a negligible amount of $O_j$ enters the summation.
+
+In short, the impedance function $f(c_{ij})$ allows the accessibility analyst to precisely define a measure of travel behavior: the relationship between the "population" at an origin and where they usually, want, or can go to reach "opportunities" at destinations.
+
+From this perspective, the definition of the impedance function $f(c_{ij})$ is incredibly important. Let's go over commonly defined impedance functions $f(\bullet)$ in accessibility research and their impact on opportunity-counting (the summation of opportunities) at specific travel costs $c_{ij}$, namely:
+
+- Binary (@eq-binary-access)
+- Uniform distribution (@eq-uniform-imped)
+- Exponential distribution (@eq-exp-imped)
+- Gamma distribution (@eq-gamma-imped)
+
+The **binary function** (@eq-binary-access) forms the basis of the cumulative opportunities measure approach (discussed in Part II). The binary function is _binary_ because it returns only two values, typically either 1 and 0. If the opportunity is reachable from $i$ to $j$ within some sort of travel cost threshold $T$, it returns a 1 for that trip. Conversely, it returns 0 if the travel cost is above a certain threshold $T$, meaning the opportunity exceeds the cost that people are willing to travel to reach it. 
+
+$$
+f(c_{ij})^{binary} =
+\begin{cases}
+ \text{1}\, & \text{if }c_{ij}\leq\text{T}\\
+ \text{0}  & \text{otherwise}
+ \end{cases}       
+$$ {#eq-binary-access}
+
+Threshold $T$ should reflect the observed or assumed travel behavior for the situation of interest. For instance, assume the travel cost is in the units of car travel minutes. If the analyst only wants to count the opportunities that a population in a region can access within a 0 to 15 minute range, then the threshold $T$ should be 15. This means that only those opportunities that can be reached within 15 minutes from any given spatial unit will be counted and all other opportunities beyond 15 minutes are assigned a 0.
+
+The impedance function $f(c_{ij})$ can take other forms, such as the commonly used [_probability density functions_](https://en.wikipedia.org/wiki/Probability_density_function) (PDF): $f(c_{ij})$ values can be interpreted as the _probability density_ of a trip occurring for each value of travel cost $c_{ij}$. If probability density values are plotted on the y-axis for each travel cost along the x-axis, the probability of a trip occurring between a certain range of $c_{ij}$ is the area under the curve. Important to note is that the area under a PDF always sums to 1, i.e., 100% probability that the trip between the minimum and maximum $c_{ij}$ will occur. 
+
+The **uniform distribution** PDF looks very similar to the binary function, as it only returns one of two values. However, it also has the property of PDFs - the area under the curve for the range of $c_{ij}$ is always 1. The general form for the uniform distribution PDF is shown in (@eq-uniform-imped). The parameters that the analyst chooses are $T_{max}$ and $T_{min}$ : these represent the maximum and minimum travel costs (i.e., the range) that describe the observed or assumed willingness to reach destinations. If the trip is of a travel cost that is within this range, it returns a value of $\frac{1}{T_{max} - T_{min}}$. Outside of this range, the function returns a 0, so we are assuming the potential of the population to interact with those opportunities is zero.
+
+$$
+f(c_{ij})^{uniform} =
+\begin{cases}
+ \frac{1}{T_{max}-T_{min}}\ & \text{for }T_{min} \leq\ c_{ij}\leq T_{max}\\
+ \ 0  & \text{otherwise}
+ \end{cases}       
+$${#eq-uniform-imped}
+
+However, analysts using a binary threshold must ask themselves: is it true that populations only travel to opportunities within a 15 minute travel? Is this 15 minute cut-off a fair assumption to make about their travel behaviour? Maybe it's more accurate to assume that the probability of a trip does not strictly drop to _zero_ beyond 15 minutes. In this case, it would be worth while considering other distributions.
+
+Other types of functions are the **exponential distribution** and the **gamma distribution**. The theoretical form of these two PDFs are shown in (@eq-exp-imped) and (@eq-gamma-imped). The analyst must select parameters for these functions represented by $\lambda$ (exponential) and $\alpha$ and $\sigma$ (gamma).  
+
+$$
+f(c_{ij}, \beta)^{exponential} = 
+\begin{cases}
+\lambda e^{-\lambda\cdot c_{ij}} & \text{for }c_{ij} \geq 0\\
+ \ 0  & \text{for } c_{ij} < 0
+ \end{cases}        
+$${#eq-exp-imped}
+
+$$
+f(c_{ij})^{gamma} = 
+\begin{cases}
+\frac{1}{\sigma^\alpha\Gamma(\alpha)} c_{ij}^{\alpha-1} \cdot e^{{-c_{ij}}/{\sigma}} & \text{for } 0 \leq c_{ij} < \infty  ; \alpha, \sigma > 0\\
+ \ 0  & \text{otherwise }
+ \end{cases}   
+$${#eq-gamma-imped}
+
+For the **exponential distribution**, the probability of a trip occurring is always highest at the lowest value of travel cost (e.g., a trip that has a travel cost of 1 has a higher probability density than a trip with a travel cost of 10). The $\lambda$ mediates the rate of the exponential curve; specifically, the higher the $\lambda$ parameter value, the higher the rate of travel cost decay. So at a $\lambda$ value that is large, the majority of trips occur within a smaller $c_{ij}$ range than if the $\lambda$ was a smaller value. Though the exponential distribution is more complex than the uniform, it allows the analyst to model travel behaviour without having to select a binary threshold beyond which opportunities are no longer counted.
+
+Consider another situation: if the probability of a trip occurring is not always highest at the lowest value of travel cost, then the **gamma distribution** can be considered. In fact, for the **gamma distribution**, the probability is often low at low costs, higher at mid-costs, and low again at high costs. The $\sigma$ and $\alpha$ parameters controls the rate and shape of the gamma curve. The higher the $\sigma$ (gamma rate) parameter, the higher the probability of the majority of trips occurring within a low travel cost range. So at low $\sigma$ (gamma rate) parameter values, the same probability is spread across a larger range of travel costs. For the $\alpha$ (shape) parameter, the higher value, the higher the probability density of trips with a higher mean travel cost.
+
+Values for both $\sigma$ and $\alpha$ are used in the gamma distribution, so it is more complex in formulation than the exponential. However, the gamma may be more useful in modelling specific travel behaviour. Namely, if the population's travel behaviour is less likely to occur at short travel times, more likely at mid-range travel times, and less likely at long travel times, the gamma distribution can be calibrated to match this pattern. 
+
+This form of travel behaviour can occur within observed home-to-work commutes from predominately single-use zoned regions: trips are less likely to occur at short travel times for a region (as a result of single-use residential zoning), are more likely at mid-range travel costs (commuting to a central business district), and less likely at long travel costs (few super-commuters). Representing this travel behaviour pattern cannot be accurately captured by the exponential distribution as short travel times _should_ have low values of $f(c_{ij})$. Similarly, the use of the uniform distribution is inaccurate in this situation as it requires the analyst to select min. and max. travel cost thresholds such that the opportunities that the short- and long- travelling population potential interactions are not counted (i.e., returns value of 0). 
+
+<!--In summary, these three discussed PDFs $f_(c_{ij})$ can take a value from 0 to approaching infinity for all positive $c_{ij}$, where the range depends on the analyst-defined parameters.--> These three PDF distribution forms are presented in order of increasingly complexity. As the complexity increases, the flexibility of explaining the travel behaviour also increases. We created an interactive [R Shiny Application](https://soukhova.shinyapps.io/Impedance-explained-shiny-app/) to experiment with the parameter values and help conceptualize what each distribution form may mean for travel behaviour assumptions by interpreting the "probability density of trip" (y-axis) $f_(c_{ij})$ at values of travel cost (x-axis) $c_{ij}$. Give it a try!
+
+## An empirical example: calibrating a model that reflects travel behaviour
+
+In all the impedance forms presented, the analyst must define parameters. A clever technique is to build a trip length distribution (TLD) using empirically observed origin-to-destination travel survey data. A TLD reflects observed travel patterns: specifically, how likely an observed trip of a certain travel cost is to occur for the population in a region of interest. Based on the TLD, we can select the best fitting theoretical PDF forms (e.g., uniform, exponential, gamma), fit the associated parameters (e.g., $T_{min}$ & $T_{max}$, $\lambda$, or $\sigma$ and $\alpha$) and use the calibrated theoretical PDF to carry the assumptions about the population's travel behaviour into the accessibility calculation.
+
+Here I demonstrate an overview of calibrating a PDF for a sample of empirical home-to-work travel flows taken from workers who live and work (full-time) within the City of Hamilton from the R data package [{TTS2016R}](https://soukhova.github.io/TTS2016R/). The flows are aggregated at level of traffic analysis zones (TAZ). This package contains a subset of home-to-work flows from the 2016 Transportation Tomorrow Survey (TTS) as well as road-network car travel times from TAZ centroids (calculated using [{r5r}](https://doi.org/10.32866/001c.21262)). {TTS2016R} is detailed in this publication [@soukhovTTS2016RDataSet2023] and is freely available [here](https://soukhova.github.io/TTS2016R/). 
+
+The TLD for this empirical data is shown in @fig-TLD-empirical.
+```{r creating-TLD}
+#creating 1 row for each OD trip (i.e., Persons = frequency)
+all_tt <- od_HAM_origin  |> dplyr::select(Persons, travel_time)
+all_tt <- all_tt[rep(seq_len(dim(all_tt)[1]), all_tt$Persons), 2]
+```
+
+```{r plotting-just-TLD}
+#| label: fig-TLD-empirical
+#| fig-cap: "Trip length distribution of home to full-time work trips (in estimated minutes by car) for the City of Hamilton."
+empirical <-  density(all_tt)
+empirical_x <- empirical$x
+empirical_y <- empirical$y #|> scales::rescale()
+empirical <- data.frame(f = empirical_y,
+                        x = empirical_x,
+                        type = "Empirical")
+
+plot_empirical_TLD <- ggplot(data = empirical) + geom_line(aes(x=x, y=f), color="grey30") + 
+  scale_x_continuous(expand = c(0, 0), limits = c(0, 50)) +
+  theme_classic() +
+  theme(legend.position  = "none") +
+  xlab(bquote(c[ij])) +
+  ylab(bquote(f(c[ij])))
+
+plot_empirical_TLD
+
+ggsave("images/post1-fig1.png")
+```
+```{r testing-different-impedance-models, echo=FALSE, warning=FALSE, message=FALSE}
+unif_ <- fitdistrplus::fitdist(data=all_tt, "unif", method="mme", optim.method="Nelder-Mead")
+# unif_
+# plot(unif_)
+
+# beta_ <- fitdistrplus::fitdist(data=all_tt_trans, "beta", method="mme", optim.method="Nelder-Mead", start=list(shape1=0.5, shape2=3))
+# beta_
+# plot(beta_)
+
+# I'm picking gamma because it's part of the exponential family. Beta seems to be a better fit but its a bit more complicated to explain for the blog. Gamma is a better fit than the less-complicated exp dist. The empirical data is not confidently 'from' any theoretical distribution (according to Kolmogorov-Smirnov test), but certain distirbutions fit the data better than others. 
+gamma_ <- fitdistrplus::fitdist(data=all_tt, "gamma", method="mme", optim.method="Nelder-Mead")
+# gamma_
+# plot(gamma_)
+
+#and we pick exponential for simplicity. It also fits okay!
+exp_ <- fitdistrplus::fitdist(data=all_tt, "exp", method="mme", optim.method="Nelder-Mead")
+# exp_
+# plot(exp_)
+```
+```{r extra}
+#trips less than 40 mins in length
+red_empirical <- empirical |> filter (x <= 30)
+```
+
+In our example, the y-axis $f(c_{ij})$ is the probability density of a trip at a given travel cost in minutes of travel $c_{ij}$. It can be observed that the probability density of a trip is highest when travel time is around `r empirical |> filter(f == max(f)) |> pull(x) |> prettyNum(digits=2)` minutes. It can also be seen that beyond the 30 min mark approximately, the rate of probability density drastically decreases. So, the probability of a trip of length 0 to 30 mins occurring is `r sum(diff(sort(red_empirical$x)) * 0.5 * (red_empirical$f[-1] + head(red_empirical$f, -1))) |> scales::percent()` (the area under the curve between these two x-value points is `r sum(diff(sort(red_empirical$x)) * 0.5 * (red_empirical$f[-1] + head(red_empirical$f, -1))) |> round(digits=2)`). Trips outside of this range make up the remaining probability. 
+
+Now let's fit the parameters of the uniform, exponential, and gamma functions (@eq-uniform-imped, @eq-exp-imped, @eq-gamma-imped) as closely to the TLD captured in @fig-TLD-empirical. The R package [{fitdistrplus}](https://cloud.r-project.org/web/packages/fitdistrplus/index.html) was used to generate parameters that best fit the TLD. The moment matching estimation (MME) fitting method and the Nelder-Mead direct optimization algorithm are used [@Muller2016]. The default values for the parameters of the three functions are summarised:
+
+-   $f(c_{ij})^{uniform}$: $T_{min}$ and $T_{max}$ is 0 and `r unif_$estimate[2] |> prettyNum(digits=1)` mins, respectively.
+
+-   $f(c_{ij})^{exponential}$: $\beta$ (rate) is `r exp_$estimate |> prettyNum(digits=1)`
+
+-   $f(c_{ij})^{gamma}$: $\alpha$ (shape) is `r gamma_$estimate[1] |> prettyNum(digits=1)` and $\sigma$ (rate) is `r gamma_$estimate[2] |> prettyNum(digits=1)`
+
+```{r plotting-impedance-functions}
+#| label: fig-TLD-all
+#| fig-cap: "Trip length distribution (empirical) with fitted theoretical PDFs (coloured) of home to full-time work trips for the City of Hamilton."
+
+travel_costs <- unique(od$travel_time)
+
+fit_unif <- data.frame(f = dunif(travel_costs, min=0, max=unif_$estimate[2]), #already scaled from 1 to 0
+                         x = travel_costs,
+                         type = "(Eq. 3) Uniform")
+fit_dexp <- data.frame(f = dexp(travel_costs, rate = exp_$estimate), #|> scales::rescale(),
+                       x = travel_costs,
+                       type = "(Eq. 4) Exp")
+fit_dgamma <- data.frame(f = dgamma(travel_costs, shape = gamma_$estimate[1], rate = gamma_$estimate[2]), #|> scales::rescale(),
+                         x = travel_costs,
+                         type = "(Eq. 5) Gamma")
+
+empirical <-  density(all_tt)
+empirical_x <- empirical$x
+empirical_y <- empirical$y #|> scales::rescale()
+empirical <- data.frame(f = empirical_y,
+                        x = empirical_x,
+                        type = "Empirical")
+
+TLDs <- rbind(fit_unif, fit_dexp, fit_dgamma, empirical)
+
+ggplot(data = TLDs) + geom_line(aes(x=x, y=f, color=type), size=0.6) + 
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 50)) +
+  theme_classic() +
+  scale_color_manual(name = "Functions",
+                     values = c("Red", "Green", "Blue", "grey30")) +
+  xlab(bquote(c[ij])) +
+  ylab(bquote(f(c[ij]))) +
+  theme(legend.position = c(0.85, 0.7))
+
+ggsave("images/post1-fig2.png")
+```
+
+For curves shown in @fig-TLD-all: the higher the $f(c_{ij})$, the higher the probability density of travelling to reach the opportunities at the destination.^[Using {fitdistrplus}, the parameters in all theoretical functions were selected through an optimization algorithm that minimizes the differences between all possible parameter range(s) and the empirical function for each theoretical function.]
+
+The uniform impedance function (red), when implemented into an accessibility calculation, would assume that the population is indifferent to _changes_ in travel cost. The population at an origin is assumed to either totally interact with an opportunity (if it's a trip between 0 to `r unif_$estimate[2] |> prettyNum(digits=1)` minutes - the $T$ thresholds) or not interact at all. 
+
+If the exponential (green) or gamma curve (blue) was implemented in an accessibility calculation, then the analyst is assuming the population is much more sensitive to changes in travel cost. However, the exponential and gamma functions are quite a different shape, so they depict a different response to the probability of traveling given a travel cost $c_{ij}$. 
+
+The exponential curve (green) is more intuitive to understand: the shorter the travel cost $c_{ij}$, the higher the $f(c_{ij})$ value. However, when compared to the empirical curve (black) (i.e., the observed travel behaviour), we can see they do not closely match. Trip lengths that are `r empirical |> filter(f == max(f)) |> pull(x) |> prettyNum(digits=2)` mins in length have the highest probability density of occurring and trips that are longer and shorter than this length occur less often and are assigned decreasing $f(c_{ij})$ values. For these reasons, the gamma function (blue) provides a fit that is closest to the empirical curve at the cost of a more complex mathematical formulation.
+
+The impedance function reflects significant assumptions about travel behaviour. The selection of the type of function and associated parameters reflects the impedance that populations face reaching opportunities. How the impedance function is used to explain accessibility will be discussed in Part II.
+
+Again, feel free to explore the parameters interactively for the uniform, exponential and gamma distributions using the interactive Shiny R Application [here](https://soukhova.shinyapps.io/Impedance-explained-shiny-app/).
+
+_The TLD used in this section is a subset of data from {TTS2016R}, the goodness-of-fit criteria and diagnostics from {fitdistrplus} are used for model parameter selection, plots are generated using {ggplot2}, and spatial objects are manipulated using {sf}, along with base {R} functions. View all the code and text (including the interactive plot) in this [GitHub repository](https://github.com/soukhova/MJ-Accessibility-Blogs)._
+
+\newpage
+# Part II: Unconstrained and constrained accessibility {#sec-partII}
+
+```{r adding-workers-and-jobs-to-land-use, include=FALSE}
+workers <- od |> 
+  group_by(Origin) |> 
+  summarize(workers = sum(Persons))
+
+jobs <- od |> 
+  group_by(Destination) |> 
+  summarize(jobs = sum(Persons))
+
+od <- merge(od, 
+            workers, 
+            by="Origin")
+od <- merge(od, 
+            jobs, 
+            by="Destination")
+
+#update the workers and jobs in the ggh_taz file.
+ggh_taz <- ggh_taz |> 
+  select(-c("workers", "jobs"))
+ggh_taz <- ggh_taz |> 
+  merge(workers, 
+        by.x = "GTA06",
+        by.y="Origin",
+        all = T)
+ggh_taz <- ggh_taz |> 
+  merge(jobs, 
+        by.x = "GTA06", 
+        by.y = "Destination", 
+        all=T)
+
+ggh_taz$workers |> sum(na.rm=T)
+ggh_taz$jobs |> sum(na.rm=T)
+
+#make sure that the above two lines yield the same number.. this is the number of people who make trips from origin to jobs inthe GGH (3,052,233 people)
+od$Persons |> sum() 
+
+od_HAM_origin$Persons |> sum() #108,526 workers traveling from Hamilton origin IDs (and only 53270 workers originate and work within Hamilton)
+
+# ggh_taz_ham_plus <- ggh_taz |> filter(GTA06 %in% od_HAM_origin$Origin & GTA06 %in% od_HAM_origin$Destination) #updated this to be GTA06 in Hamilton (both origin AND destination)
+ggh_taz_ham_plus <- ggh_taz  |> filter(PD >= 41 & PD <= 46)
+```
+
+```{r select-hamilton-origins-2, include=FALSE}
+#keeping only trips originating from Hamilton IDs (the planning district of Hamilton)
+ham_o_ids <- ggh_taz |> filter(PD >= 41 & PD <= 46) |> data.frame() |> transmute(GTA06, AREA) #list of hamilton IDs
+od_HAM_origin <- od |> filter(Origin %in% ham_o_ids$GTA06 & Destination %in% ham_o_ids$GTA06) #only keeping od trips that originate within Hamilton AND finish within Hamilton
+
+od_HAM_origin$Persons |> sum() #108,526 workers traveling from Hamilton origin IDs (and only 53270 workers originate and work within Hamilton)
+
+# ggh_taz_ham_plus <- ggh_taz |> filter(GTA06 %in% od_HAM_origin$Origin & GTA06 %in% od_HAM_origin$Destination) #updated this to be GTA06 in Hamilton (both origin AND destination)
+ggh_taz_ham_plus <- ggh_taz  |> filter(PD >= 41 & PD <= 46)
+```
+
+```{r updating-hamilton-origins, include=FALSE}
+workers <- od_HAM_origin |>
+  group_by(Origin) |>
+  summarize(workers = sum(Persons))
+
+jobs <- od_HAM_origin |>
+  group_by(Destination) |>
+  summarize(jobs = sum(Persons))
+
+od_HAM_origin <- od_HAM_origin %>% select(-c("workers", "jobs"))
+
+od_HAM_origin <- merge(od_HAM_origin,
+            workers,
+            by="Origin")
+od_HAM_origin <- merge(od_HAM_origin,
+            jobs,
+            by="Destination")
+
+#update the workers and jobs in the ggh_taz file.
+ggh_taz_ham_plus <- ggh_taz_ham_plus |>
+  select(-c("workers", "jobs"))
+ggh_taz_ham_plus <- ggh_taz_ham_plus |>
+  merge(workers,
+        by.x = "GTA06",
+        by.y="Origin",
+        all = T)
+ggh_taz_ham_plus <- ggh_taz_ham_plus |>
+  merge(jobs,
+        by.x = "GTA06",
+        by.y = "Destination",
+        all=T)
+
+ggh_taz_ham_plus$workers |> sum(na.rm=T)
+ggh_taz_ham_plus$jobs |> sum(na.rm=T)
+
+#make sure that the above two lines yield the same number.. this is the number of people who make trips from origin (Hamilton Center) to jobs anywhere in the GGH (108,526 people)
+od_HAM_origin$Persons |> sum()
+```
+
+```{r creating-TLD-2}
+#creating 1 row for each OD trip (i.e., Persons = frequency)
+all_tt <- od_HAM_origin  |> dplyr::select(Persons, travel_time)
+all_tt <- all_tt[rep(seq_len(dim(all_tt)[1]), all_tt$Persons), 2]
+```
+
+```{r testing-different-impedance-models-2, echo=FALSE, warning=FALSE, message=FALSE}
+unif_ <- fitdistrplus::fitdist(data=all_tt, "unif", method="mme", optim.method="Nelder-Mead")
+gamma_ <- fitdistrplus::fitdist(data=all_tt, "gamma", method="mme", optim.method="Nelder-Mead")
+exp_ <- fitdistrplus::fitdist(data=all_tt, "exp", method="mme", optim.method="Nelder-Mead")
+```
+
+```{r fitting-imped-values}
+travel_costs <- unique(od$travel_time)
+
+fit_unif <- data.frame(f = dunif(travel_costs, min=0, max=unif_$estimate[2]), #already scaled from 1 to 0
+                         x = travel_costs,
+                         type = "Uniform")
+fit_dexp <- data.frame(f = dexp(travel_costs, rate = exp_$estimate), #|> scales::rescale(),
+                       x = travel_costs,
+                       type = "Exp")
+fit_dgamma <- data.frame(f = dgamma(travel_costs, shape = gamma_$estimate[1], rate = gamma_$estimate[2]), #|> scales::rescale(),
+                         x = travel_costs,
+                         type = "Gamma")
+
+TLDs <- rbind(fit_unif, fit_dexp, fit_dgamma)
+```
+
+Within the context of transportation planning, accessibility (or potential access) can be defined as a measure of the amount of interaction a "population" at an origin potentially has with "opportunities" at destinations in a given region. It is a product of the land-use and the population's means of transportation.
+
+In this section, we distinguish between two types of accessibility measures: *unconstrained* and *constrained* measures. The distinction is important to help accessibility analysts to more clearly interpret outputs. 
+
+First, let's detail **unconstrained** accessibility. The general form of the unconstrained measure, let's call it $S_i$, is the measure proposed by [@hansen1959]. Many accessibility measures are derived and continue to be derived from this proposed formulation. $S_i$ is an accessibility value that is calculated for each spatial unit, and is appropriately termed *location-based accessibility*. This value is the summation of all the $O_j$ available (i.e., reachable) at each spatial unit according to some impedance function $f(c_{ij})$. $S_i$ is defined in @eq-hansen-access-2:
+
+$$
+S_i = \sum_{j=1}^JO_j \cdot f(c_{ij})
+$$ {#eq-hansen-access-2}
+
+\noindent Where:
+
+-   $c_{ij}$ is a measure of the cost of moving between $i$ and $j$.
+-   $f(\cdot)$ is an impedance function of $c_{ij}$; it can take the form of any monotonically decreasing function chosen based on positive or normative criteria [@paez2012measuring].
+-   $i$ is a set of origin locations in the region ($i = 1,\cdots,N$).
+-   $j$ is a set of destination locations in the region($j = 1,\cdots,J$).
+-   $O_j$ is the number of opportunities at location $j$; $O = \sum_{j=1}^J O_j$ is the total supply of opportunities in the study region.
+
+Many variations of $S_i$ have been proposed - but largely they focus on tweaks to the type of $f(c_{ij})$ used. This measure counts $O_j$ (after being weighted by $f(c_{ij})$) for each $i$. This means that the score assigned to each $i$ is the summation of all the opportunities that can *potentially* be interacted with.
+
+In lay terms, $S_i$ is a measure of the number of opportunities that someone at $i$ can potentially interact with, given their travel behaviour. However, counting all opportunities of potential interaction may not suit certain opportunities. Consider the following hypothetical example.
+
+One can live in a part of the city where they have relatively high accessibility $S_i$ to jobs as a result of land-use (e.g., close to a commercial business district) and transportation options (e.g., great roads, excellent transit). Say $S_i$ is a value of "10,000 potential job opportunities" for a neighbourhood $i$. Now, imagine if their adjacent neighbourhoods have 15,000 people who can also reach those same 10,000 job opportunities. Though they can potentially interact with a *relatively* high $S_i$ value of 10,000 opportunities, they may have less *available* opportunities as a result of relatively high neighbouring demand for opportunities. When compared to other areas of the city with relatively lower $S_i$ values but with a similar level of job opportunities and population demand, those other areas in the city may have more potential _spatial availability_ than the neighbourhood where our hypothetical person lives.
+
+This concept is formally known as *competition*, and has been applied within the influential accessibility works of @shen1998 and @weibull_axiomatic_1976 as well as the widely used floating catchment areas methods (e.g., the two step floating catchment area (2SFCA) approach of @luo2003). We can think of these works as adjustments to $S_i$ (unconstrained accessibility) that account for the population's demand for opportunities in the region of interest.
+
+In a recently published journal article, an alternative derivation of competitive accessibility that _constrains_ the results to match known quantities in the system is proposed [@soukhovIntroducingSpatialAvailability2023]. These known quantities can be the total number of opportunities or the total population in the region under analysis. Since we constrain one of those two (opportunities or population), we think of this measure as a *singly-constrained* competitive accessibility measure ($V_i$).
+
+In $V_i$, the total number of opportunities in the study region are preserved. So if a urban region has 100,000 opportunities, at the end of the analysis, the sum of _all_ $V_i$ values in the region is 100,000. How is this achieved? As a result of the proportional allocation feature: opportunities are allocated proportionally to each spatial units in the region based on the relative travel impedance and relative population density. We call this measure *spatial availability* which we denote as $V_i$ to distinguish it from unconstrained accessibility $S_i$. Spatial availability and its mathematical formulation is defined in @eq-spatial-avail:
+
+$$
+\begin{array}{l}
+\\V_{i} = \sum_{j=1}^NO_jF^t_{ij} \\
+\text{Where: } F^t_{ij} = \frac{F^p_{i} \cdot F^c_{ij}}{\sum_{i=1}^N F^p_{i} \cdot
+F^c_{ij}}
+\end{array}
+$${#eq-spatial-avail}
+
+\noindent Where $V_i$ contains the opportunities, just as in the *unconstrained* accessibility measure $S_i$, but the allocation depends on balancing factor $F^t_{ij}$. The sum of of $F^t_{ij}$ in the region adds up to 1, which is how the sum of the spatial availability is equal to the sum of $O_j$. Revising our hypothetical example of a urban region with 100,000 opportunities: it can be understood that both measures ($S_i$ and $V_i$) are weighted sums of opportunities, but in $S_i$ the sum of all opportunities may be more or less than the 100,000. In contrast, thanks to the proportional allocation balancing factors in $V_i$, the sum of $V_i$ values across the region is constrained to equal 100,00 opportunities.
+
+For additional context, within $V_i$:
+
+-   $F^t_{ij}$ is a balancing factor defined the population balancing factor ($F^p_{i} = \frac{P_{i}}{\sum_{i=1}^N P_{i}}$) and travel impedance balancing factor ($F^c_{ij} = \frac{f(c_{ij})}{\sum_{i=1}^N f(c_{ij})}$)
+
+The balancing factor $F^p_{i}$ corresponds to the proportion of the population in origin $i$ relative to the population in the region. On the right hand side of the equation, the numerator $P_{i}$ is the population in neighbourhood $i$. The summation in the denominator is over $i=1,\cdots,N$, and adds up to the total population of the region under analysis. What does this mean practically? It means, neighbourhoods with a higher density of people get allocated more opportunities (i.e., a larger $F^p_{i}$ value), and less population dense neighborhoods get allocated smaller amounts. This measure is sensitive to demand: more people who are seeking opportunities get allocated more opportunities.  <!--Notice that we incorporate an empirical parameter $\alpha$. The role of $\alpha$ is to modulate the effect of demand by population. When $\alpha <1$, opportunities are allocated more rapidly to smaller centers relative to larger ones; $\alpha>1$ achieves the opposite effect.-->
+
+The second balancing factor, $F^c_{ij}$ is the travel impedance balancing factor. It uses the impedance function (i.e., probability of travel given travel costs) to proportionally allocate more opportunities to neighbourhoods that are closer to (or contain) a higher density of opportunities. That is, this balancing factor assumes that populations within neighbourhoods that have lower travel impedance (less costly travel) to opportunities are *more willing* to take these opportunities, resulting in a higher value of $F^c_{ij}$ for the neighbourhood. Indeed, the travel cost balancing factor can be thought of as the proportion of the population at an 'origin' neighbourhood $i$ willing to travel to a 'destination' neighbourhood $j$, conditional on the travel behavior as described by the impedance function. What does this mean practically? It means, the higher the $F^c_{ij}$ for a neighbourhood, the more opportunities get allocated to this neighbourhood than other neighbourhoods.
+
+Overall, $S_i$ and $V_i$ can be complex to understand - but the outputs may clarify their intuition.
+
+\newpage
+## Differences in unconstrained and constrained accessibility
+
+For this demonstration, **unconstrained** and **constrained** accessibility are calculated using data taken from the R data package {TTS0216R}. This package contains a subset of home to work (full-time) flows from the 2016 Transportation Tomorrow Survey (TTS) as well as travel time by car calculated using {r5r}. {TTS2016R} is detailed in this publication [@soukhovTTS2016RDataSet2023] and is freely available to be explored [here](https://soukhova.github.io/TTS2016R/). The focus of this demonstration is the City of Hamilton, Canada, a city approximately 70 km south-west of Toronto, and within the TTS survey area.
+
+A calibrated gamma distribution probability density function serves as the impedance function for the analysis and is shown in @fig-gamma ($\alpha$ (shape) is `r gamma_$estimate[1] |> prettyNum(digits=1)` and $\sigma$ (rate) is `r gamma_$estimate[2] |> prettyNum(digits=1)`). The data set and parameters were fit using the empirical data and discussed in Part I. As a refresher, a gamma distribution form was selected as it best fits the sample of home to full-time work trips beginning and ending in the City of Hamilton. The values along the y-axis can be interpreted as the probability density of a trip at a certain travel time $c_{ij}$ of occurring i.e., trips of length `r fit_dgamma |> filter(f == max(f)) |> pull(x) |> prettyNum(digits=1)` minutes are the most likely to occur and hence are assigned the highest relative $f(c_{ij})$ value.
+
+```{r plotting-impedance-functions-2}
+#| label: fig-gamma
+#| fig-cap: "The fitted theoretical gamma distribution travel impedance function of home-to-work trips (in estimated minutes by car) for the City of Hamilton."
+
+#only plotting gamma function for simplicity
+
+ggplot(data = fit_dgamma) + geom_line(aes(x=x, y=f), size=0.6, color = "blue") + 
+    scale_x_continuous(expand = c(0, 0), limits = c(0, 50)) +
+  scale_y_continuous(limits = c(0,0.06))+
+  theme_classic() +
+  xlab(bquote(c[ij])) +
+  ylab(bquote(f(c[ij])))
+
+ggsave("images/post2-fig1.png")
+```
+
+The {accessibility} package is used to conveniently calculate unconstrained accessibility $S_i$ (@eq-hansen-access-2) and singly-constrained competitive accessibility $V_i$ (@eq-spatial-avail). The resulting $S_i$ (Purples) and $V_i$ (Greens) are shown in @fig-raw-con-and-unconstrained-access below:
+
+```{r using-accessibilitypackage, include=FALSE}
+#Reformatting for input into the accessibility() function. 
+od_short <- od_HAM_origin |> 
+  transmute(Origin, 
+            Destination, 
+            travel_time) |>
+  rename("from_id" = Origin ,
+         "to_id" = Destination,
+         "tt" = travel_time)
+
+taz_short <- ggh_taz_ham_plus |> 
+  st_drop_geometry() |> 
+  transmute(GTA06, 
+            workers, 
+            jobs) |>
+  rename("id" = GTA06) |> 
+  mutate(workers = ifelse(is.na(workers), 0, workers),
+         jobs = ifelse(is.na(jobs), 0, jobs))
+
+my_unif <- function(x) {
+  weights <- dunif(x, min=unif_$estimate[1], max=unif_$estimate[2])
+  weights <- ifelse(weights == 0, 0.00000000000000000001, weights)
+  return(weights)
+}
+
+my_exp <- function(x) {
+  weights <- dexp(x, rate = exp_$estimate)
+  # The exponential function never gives zeros
+  # weights <- ifelse(weights == 0, 0.00000000000000000001, weights)
+  return(weights)
+}
+
+my_gamma <- function(x) {
+  weights <- dgamma(x, shape = gamma_$estimate[1], rate = gamma_$estimate[2])
+  weights <- ifelse(weights == 0, 0.00000000000000000001, weights)
+  return(weights)
+}
+
+# calc for package... unconstrained 
+unconstrained_unif <- gravity(
+  travel_matrix = od_short,
+  land_use_data = taz_short,
+  opportunity = "jobs",
+  travel_cost = "tt",
+  decay_function = my_unif) |>   rename("S_i_unif_pkg" = jobs)
+
+unconstrained_exp <- gravity(
+  travel_matrix = od_short,
+  land_use_data = taz_short,
+  opportunity = "jobs",
+  travel_cost = "tt",
+  decay_function = my_exp) |>   rename("S_i_exp_pkg" = jobs)
+
+unconstrained_gamma <- gravity(
+  travel_matrix = od_short,
+  land_use_data = taz_short,
+  opportunity = "jobs",
+  travel_cost = "tt",
+  decay_function = my_gamma)  |> rename("S_i_gamma_pkg" = jobs)
+
+package_S <- merge(unconstrained_unif,unconstrained_exp, by="id", all=T) 
+package_S <- merge(package_S, unconstrained_gamma, by="id", all=T)
+
+# add to taz 
+ggh_taz <- merge(ggh_taz, package_S, by.x=("GTA06"), by.y=("id"), all=TRUE)
+
+unconstrained_unif$S_i_unif_pkg %>% sum(na.rm=T)
+unconstrained_exp$S_i_exp_pkg %>% sum(na.rm=T)
+unconstrained_gamma$S_i_gamma_pkg %>% sum(na.rm=T)
+```
+
+```{r using-accessibilitypackage-2, include=FALSE}
+constrained_unif <- spatial_availability(travel_matrix = od_short,
+                                        land_use_data = taz_short,
+                                        opportunity = "jobs",
+                                        demand = "workers",
+                                        travel_cost = "tt",
+                                        decay_function = my_unif,
+                                        alpha = 1) |> 
+  rename("V_i_unif_pkg" = jobs)
+
+constrained_exp <- spatial_availability(travel_matrix = od_short,
+                                        land_use_data = taz_short,
+                                        opportunity = "jobs",
+                                        demand = "workers",
+                                        travel_cost = "tt",
+                                        decay_function = my_exp,
+                                        alpha = 1) |> 
+  rename("V_i_exp_pkg" = jobs)
+
+constrained_gamma <- spatial_availability(travel_matrix = od_short,
+                                        land_use_data = taz_short,
+                                        opportunity = "jobs",
+                                        demand = "workers",
+                                        travel_cost = "tt",
+                                        decay_function = my_gamma,
+                                        alpha = 1) |> 
+  rename("V_i_gamma_pkg" = jobs)
+
+package_V <- merge(constrained_unif,constrained_exp, by="id", all=T) 
+package_V <- merge(package_V, constrained_gamma, by="id", all=T)
+
+# add to taz 
+ggh_taz <- merge(ggh_taz, package_V, by.x=("GTA06"), by.y=("id"), all=TRUE)
+
+constrained_unif$V_i_unif_pkg %>% sum(na.rm=T)
+constrained_exp$V_i_exp_pkg %>% sum(na.rm=T)
+constrained_gamma$V_i_gamma_pkg %>% sum(na.rm=T)
+taz_short$jobs %>% sum() # each line should equal this number
+```
+
+```{r access-unconstrained-reformating-for-plotting}
+# filter the taz so only hamilton center area. This is for plotting the results that was created using 'od_HAM_origin' and 'ggh_taz_ham_plus' 
+
+ham_taz<- ggh_taz |> filter(PD >= 41 & PD <= 46)
+
+ham_taz <- ham_taz |> 
+  mutate(S_i_unif_norm= S_i_unif_pkg / sum(S_i_unif_pkg, na.rm=T) *100,
+         S_i_exp_norm= S_i_exp_pkg / sum(S_i_exp_pkg, na.rm=T)*100,
+         S_i_gamma_norm = S_i_gamma_pkg / sum(S_i_gamma_pkg, na.rm=T)*100)
+
+# add a cat. variable to each sf object and bind them with rbind. then make them into a faceted tmap.
+ham_taz_Siunif_norm <- ham_taz |>  
+  mutate(type =  glue("Relative Si (uniform)") ) |>
+  select(S_i_unif_norm, S_i_unif_pkg, type) |> 
+  rename(Access_i_norm = S_i_unif_norm,
+         Access_i = S_i_unif_pkg)
+
+ham_taz_Siexp_norm <- ham_taz |> 
+  mutate(type =  glue("Relative Si (exponential)") ) |>
+  select(S_i_exp_norm, S_i_exp_pkg, type) |> 
+  rename(Access_i_norm = S_i_exp_norm,
+         Access_i = S_i_exp_pkg)
+
+ham_taz_Sigamma_norm<- ham_taz|>
+  mutate(type =  glue("Relative Si (gamma)") ) |>
+  select(S_i_gamma_norm, S_i_gamma_pkg, type) |> 
+  rename(Access_i_norm = S_i_gamma_norm,
+         Access_i = S_i_gamma_pkg)
+
+#ham_taz_Si_facet <- rbind(ham_taz_Siunif_norm, ham_taz_Siexp_norm, ham_taz_Sigamma_norm)
+# ham_taz_Si_facet |> summary()
+```
+
+```{r access-constrained-reformating-for-plotting, include=FALSE}
+ham_taz <- ham_taz |> 
+  mutate(V_i_unif_norm= V_i_unif_pkg / sum(V_i_unif_pkg, na.rm=T) *100,
+         V_i_exp_norm= V_i_exp_pkg / sum(V_i_exp_pkg, na.rm=T)*100,
+         V_i_gamma_norm = V_i_gamma_pkg / sum(V_i_gamma_pkg, na.rm=T)*100)
+
+# add a cat. variable to each sf object and bind them with rbind. then make them into a faceted tmap.
+ham_taz_Viunif_norm <- ham_taz |>  
+  mutate(type =  glue("Relative Vi (uniform)") ) |>
+  select(V_i_unif_norm, V_i_unif_pkg, type) |> 
+  rename(Access_i_norm = V_i_unif_norm,
+         Access_i = V_i_unif_pkg)
+
+ham_taz_Viexp_norm <- ham_taz|> 
+  mutate(type =  glue("Relative Vi (exponential)") ) |>
+  select(V_i_exp_norm, V_i_exp_pkg, type) |> 
+  rename(Access_i_norm = V_i_exp_norm,
+         Access_i = V_i_exp_pkg)
+
+ham_taz_Vigamma_norm<- ham_taz|>
+  mutate(type =  glue("Relative Vi (gamma)") ) |>
+  select(V_i_gamma_norm, V_i_gamma_pkg, type) |> 
+  rename(Access_i_norm = V_i_gamma_norm,
+         Access_i = V_i_gamma_pkg)
+
+ham_taz$V_i_unif_pkg |> sum(na.rm=T)
+ham_taz$V_i_exp_pkg |> sum(na.rm=T)
+ham_taz$V_i_gamma_pkg |> sum(na.rm=T)
+
+# ham_taz$workers |> sum(na.rm=T) #these are the unfiltered numbers, they include all workers and jobs who live in hamilton and work anywhere (even outside of hamilton). Our analysis only considers people living and working in hamilton (full-time)
+# ham_taz$jobs |> sum(na.rm=T)
+ggh_taz_ham_plus$jobs|> sum(na.rm=T)
+ggh_taz_ham_plus$workers|> sum(na.rm=T)
+```
+
+```{r access-con-and-unconstrained-plots}
+ham_taz_facet <- cbind(ham_taz_Sigamma_norm %>% st_drop_geometry(),
+                       ham_taz_Vigamma_norm) %>% st_sf()
+
+uncon_raw_plot <- tm_shape(ham_taz_Sigamma_norm) +
+  tm_polygons("Access_i",
+              style = "cont",
+              palette = "Purples",
+              title = " ",
+              border.col = NULL) +
+  tm_shape(ggh_pd |> filter(PD >= 41 & PD <= 46)) +
+  tm_borders("black", lwd=0.5)+
+  tm_scale_bar(position = c("right", "bottom"),breaks=c(0,1,5,10) )+
+  tm_compass(position = c("left", "top"), size=1.0)+
+  tm_layout(legend.outside = FALSE,
+            legend.position = c("left", "bottom"),
+            panel.labels = expression(S[i]))
+
+con_raw_plot <- tm_shape(ham_taz_Vigamma_norm) +
+  tm_polygons(c("Access_i"),
+              style = "cont",
+              palette = "Greens",
+              title = " ",
+              border.col = NULL) +
+  tm_shape(ggh_pd |> filter(PD >= 41 & PD <= 46)) +
+  tm_borders("black", lwd=0.5)+
+  tm_scale_bar(position = c("right", "bottom"),breaks=c(0,1,5,10) )+
+  tm_compass(position = c("left", "top"), size=1.0)+
+  tm_layout(legend.outside = FALSE,
+            legend.position = c("left", "bottom"),
+            panel.labels = expression(V[i]))
+
+uncon_con_raw_plot <- tmap_arrange(uncon_raw_plot, con_raw_plot, ncol = 2)
+```
+
+```{r access-con-and-unconstrained-percentage-plots}
+ham_taz_facet <- rbind(ham_taz_Sigamma_norm %>% mutate(type = "Si"),
+                       ham_taz_Vigamma_norm %>% mutate(type = "Vi"))
+
+ham_46_bb <- st_bbox(ggh_pd %>% filter(PD == 46))
+
+uncon_con_perc_plots <- tm_shape(ham_taz_facet, bbox=ham_46_bb) +
+  tm_polygons("Access_i_norm",
+              palette = c("red", "yellow", "darkgreen"),
+              style ="cont",
+              breaks=c(-0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, +1.8),
+              label = c(">0.4%", "0.6%", "0.8%","1.0%", "1.2%","1.4%", "1.6%", "<1.8%"),
+              title = glue_col("% of total potential job interactions in the region
+              **out of {sum(ham_taz_Sigamma_norm$Access_i, na.rm=T) |> round()} for Si and {sum(ham_taz_Vigamma_norm$Access_i, na.rm=T) |> round()} for Vi"),
+              legend.is.portrait = FALSE,
+              border.col = NULL) +
+  tm_facets("type", ncol = 2) +
+  tm_shape(street)+
+  tm_lines("darkorchid3", lwd=2)+
+  tm_shape(ggh_pd |> filter(PD >= 41 & PD <= 46)) +
+  tm_borders("black", lwd=1.8)+
+  tm_scale_bar(position = c("right", "bottom"),breaks=c(0,1,2,4) )+
+  tm_compass(position = c("left", "top"), size=1.0)+
+  tm_layout(#asp = 1.5,
+            legend.outside=TRUE,
+            legend.outside.position = "bottom",
+            legend.position = c(0.2, 0.1),
+            legend.title.size = 0.9)
+```
+
+```{r creating-worker-job-plot}
+#NOTE: want to examine another region? Change this to PD == 1, 2, 3., etc. I think I should do this for toronto.
+ggh_taz_ham_plus_all <- ggh_taz_ham_plus |> 
+  st_buffer(dist=50) |>
+  group_by(PD >= 41 & PD <= 46) |> summarize() |>
+  st_buffer(dist=150)
+
+workers_tm <- 
+  tm_shape(ggh_taz_ham_plus |> filter(PD >= 41 & PD <= 46))+
+  tm_polygons(col = "workers", title = " ", style = "cont", #border.col = NULL, 
+              breaks = c(13, 244, 481, 752, 2121), 
+              labels = c("13 (min.)", "244 (1st Qu.)", "481 (median)", "752 (3rd Qu.)", "2121 (max.)"),
+              border.col = NULL) +
+  tm_shape(ggh_pd |> filter(PD >= 41 & PD <= 46)) +
+  tm_borders("black", lwd=0.5)+
+  tm_scale_bar(breaks=c(0,1,5,10), position = c("right", "bottom") ) +
+  tm_compass(position = c("left", "top"), size=1) +
+  tm_layout(panel.labels = "No. of workers",
+            legend.position = c("left", "bottom"))
+jobs_tm <-
+  tm_shape(ggh_taz_ham_plus |> filter(PD >= 41 & PD <= 46)) +
+  tm_polygons(col = "jobs", title = " ", style = "cont",
+              palette = c("Blues"),
+              breaks = c(15, 120, 282, 579, 6388), 
+              labels = c("15 (min.)", "120 (1st Qu.)", "282 (median)", "579 (3rd Qu.)", "6388 (max.)"),
+              border.col = NULL) +
+  tm_shape(ggh_pd |> filter(PD >= 41 & PD <= 46)) +
+  tm_borders("black", lwd=0.5)+
+  tm_scale_bar(breaks=c(0,1,5, 10), position = c("right", "bottom") ) +
+  tm_compass(position = c("left", "top"), size=1) +
+  tm_layout(panel.labels = "No. of jobs",
+            legend.position = c("left", "bottom"))
+
+workers_jobs_plot <- tmap_arrange(workers_tm, jobs_tm, ncol = 2)
+```
+
+```{r}
+#| label: fig-raw-con-and-unconstrained-access
+#| fig-cap: "The calculate unconstrained (Si) and constrained (Vi) accessibility (a.k.a. spatial availability) scores for the City of Hamilton. Calculated using an empirically calibrated gamma distribution travel impedance function."
+#| 
+uncon_con_raw_plot
+tmap_save(uncon_con_raw_plot, "images/post2-fig2.png", height=5)
+```
+
+In @fig-raw-con-and-unconstrained-access, the raw $S_i$ and $V_i$ scores are presented. Both measures reflect *potential interaction* with jobs based on empirical home-to-work travel behaviour in Hamilton: people who reside in each spatial unit make certain trips to other spatial units (in Hamilton) and these trips have a certain travel time (travel cost $c_ij$) with associated gamma impedance $f(c_{ij}$ value. These observed trip patterns inform the calculated $S_i$ and $V_i$ values for each spatial unit. What's notable is the difference in the **magnitude** and the **interpretation** of unconstrained ($S_i$) and constrained ($V_i$) values, let's discuss.
+
+Looking at the left plot $S_i$ in @fig-raw-con-and-unconstrained-access, the values reflect the sum of jobs that can be potentially interacted with by the population at each $i$ multiplied by their probability of being reached as informed by the calculated travel impedance $f(c_{ij})$ value. The maximum $S_i$ value is the darkest purple, and that value means that people who reside in those spatial units have the _lowest_ travel impedance and _highest_ concentration of potential job interaction for the region. The value itself does not have a specific meaning as it is just the sum of 'weighted' jobs: it can be interpreted as a relative score of potential interaction based on the observed trip patterns of people who reside in the City. For instance, areas within the centre of Hamilton have the highest values, this is both where jobs are largely clustered as well as major roadways (highways are pictured) and denser street networks. 
+
+Now looking at the right plot $V_i$ (constrained) in @fig-raw-con-and-unconstrained-access, the values reflect the sum of the proportionally allocated (based on travel impedance and population) _potential job interactions_. In other words, each value of $V_i$ is the number of jobs that the spatial unit $i$ can interact with based on the observed trips made from that spatial unit's impedance values relative to how others in the region can interact with the jobs. Unlike $S_i$, the raw values of $V_i$ do have a meaning in addition to being a relative score of _competitive_ potential job interactions. This score reflects the potential _availability_ of jobs: potential job interactions are less likely to occur if the concentration of jobs is low and the density of people interacting with those jobs are high. So as we can observe in the plot, $V_i$ considers population demand, and as the centre of Hamilton is the most densely populated area in the city, the centre does not share the same intensity of trend as $S_i$. 
+
+The $V_i$ value in itself is also meaningful. $V_i$ values communicates the number of potentially _available_ job interactions per each spatial unit $i$ out of all the jobs in the region. If all $V_i$ values are added together, the sum equals `r ham_taz$V_i_gamma_pkg |> sum(na.rm=T) |> prettyNum(big.mark=",")` - the total number of jobs taken by people who live and work (full-time) within the City from the data set. So in the most green spatial unit, `r ham_taz_Vigamma_norm$Access_i |> max(na.rm=T) |> prettyNum(digit = 1, big.mark=",")` potentially available job interactions can occur out of the total `r ham_taz$V_i_gamma_pkg |> sum(na.rm=T) |> prettyNum(big.mark=",")` jobs. Again, $V_i$ is produced through proportional allocation, the total number of jobs is divided up and assigned to each spatial unit based on the impedance to reach jobs and the population who also interact with these potential opportunities.
+
+To more equally compare $S_i$ and $V_i$ and make sense of the 'highs' and 'lows', it may be useful to standardise the values onto a similar scale. In @fig-perc-con-and-unconstrained-access, the values as presented as a percentage of the regional sum (i.e., a % of the sum of all $S_i$ values and the % of the sum of all $V_i$ values) are visualized for the centre of Hamilton.
+
+```{r}
+#| label: fig-perc-con-and-unconstrained-access
+#| fig-cap: "Scaled unconstrained (Si) and constrained (Vi) accessibility scores for Hamilton Centre. Values are presented as a percentage of the total sum of scores within the City of Hamilton. Major highways are shown in purple for spatial reference. Values are calculated using an empirically calibrated gamma distribution travel impedance function."
+uncon_con_perc_plots
+tmap_save(uncon_con_perc_plots, "images/post2-fig3.png", height=5)
+```
+
+Examining $S_i$ (left plot) in @fig-perc-con-and-unconstrained-access: unconstrained accessibility. Neighbourhoods with 'high' accessibility (e.g., greens, that start at 1.3% relative values or higher) can potentially interact with `r (1.3/100)*sum(ham_taz_Vigamma_norm$Access_i, na.rm=T) |> round(digits=-3)` jobs or more as informed by observed travel behaviour. These raw values are difficult to interpret, so seeing a neighbourhood as being an area of relative 'high', 'medium' (yellows) or 'low' (reds) accessibility value simplifies the interpretation of 'potential interaction' with jobs; as long as we ignore _competition_.
+
+Examining the plot on the right side in @fig-perc-con-and-unconstrained-access, visuals $V_i$ spatial availability. This measure does not ignore competition for potential job interaction. The general trend between both plots are similar, but a handful of spatial units that are more intensely green or red/orange can be seen. These differences are a result of competition. Within this region, spatial units that are more densely populated as well as having below average travel impedance have higher standardized $V_i$ values than $S_i$ values. Conversely, below average population and above average travel impedance yields spatial availability $V_i$ values that are lower than $S_i$. 
+
+In essence, $V_i$ reflects travel impedance like $S_i$ does, but it also considers competition. Spatial units with orange/green $S_i$ that have red $V_i$ are a cause for concern: they likely have low travel impedance but high competition that makes their $V_i$ relatively low. Conversely, spatial units with orange/red $S_i$ that have green $V_i$ have high travel impedance but low competition for their opportunities so their spatial availability of jobs may in fact be alright. Spatial availability adds an additional layer of consideration into the accessibility measure, and as such, reveals more about the region (under the travel behaviour and opportunity accessed assumptions).
+
+Across both $S_i$ and $V_i$ in @fig-perc-con-and-unconstrained-access, we can see some common low values (red) located in the north end of the city. From unconstrained accessibility, we know these TAZ have high relative travel impedance - this may be because people who work in the north end do not live relatively close to these opportunities so have high relative travel times. Interestingly though, we can confirm that there is a high relative number of jobs within these TAZ (see @fig-worker-job-plot below), however, even the number of jobs does not balance the impedance value and higher demand for those jobs. Hence, the constrained accessibility measure is also low.
+
+```{r worker-job-plot}
+#| label: fig-worker-job-plot
+#| fig-cap: "The number of workers and jobs in Hamilton Center. Note: only workers who reside and work within Hamilton Center are considered in the accessibility calculations for this demonstration."
+workers_jobs_plot
+tmap_save(workers_jobs_plot, "images/post2-fig4.png", height=5)
+```
+
+## Concluding remarks
+
+Accessibility is a unique measure that characterises the relationship between land-use (where populations reside and the opportunities they can interact with) in addition to transportation travel impedance. How the relationship is conceptualization (i.e., if there's competition or not) and how the travel impedance is calibrated (i.e., what function describes travel behaviour) are critical in determining what the final values are and how to interpret them.
+
+In this section, we outlined two branches of accessibility measures: unconstrained ($S_i$ in this case) and constrained (spatial availability $V_i$). Unconstrained accessibility only considers opportunities that could be interacted with while constrained considers _both_ those opportunities and the demand for those opportunities in addition to having that property of proportional allocation. This property allows the raw values of $V_i$ to be interpreted without any sort of transformation or standardizing; $V_i$ is simply the number of opportunities that can be potentially interacted with out of _all_ opportunities in the region.
+
+$V_i$ provides insights that $S_i$ does not. Firstly, it considers considers competition from demand. Secondly, it does not need to be standardized to be understood. These two insights are important:
+
+- **Considering competition**: places of employment are a _non-divisible_ type of opportunity, they only allow one person to take one job. Unless there's a reason to _not_ consider competition, measuring access to opportunities that have some capacity using an unconstrained measure $S_i$ does not make much theoretical sense from an opportunity-planning perspective; this will be explored in subsequent post(s).
+- **Interpretation**: a spatial unit has a certain number of $V_i$, opportunities that are spatially available for interaction. We can tangibly interpret if that's high or low (out of the total number of opportunities). Further, we can also divide $V_i$ by population at that origin to obtain opportunity per capita values. This value can be used as a benchmark to compare opportunity per capita or levels of service across areas of the region, between regions, and/or across time; again, this will be explored in subsequent post(s).
+
+Ultimately, unconstrained accessibility $S_i$ tells you how many opportunities can be potentially reached. Spatial availability $V_i$ tells you how many opportunities are _available_ based on how many can be potentially reached and demanded.
+
+Accessibility analysis sheds light on regions of inequitable potential access. Assumptions on what region to analyse, what population and opportunities are the subject of analysis, the travel cost unit and calculation, the impedance function and the measure used all impact the final results. But ultimately, the output represents the number of opportunities that could *potentially* be reached from each origin. It is critical that the assumptions embedded within each step of analysis are understood so that the final value can be interpreted and inequities be identified.
+
+Once these spatial inequities have been identified - what do we do about it? That is the subject for future sections.
+
+Openness is legitimacy: this report was written in a R environment and can be fully reproduced from the materials available at this GitHub ([repository](https://github.com/soukhova/MJ-Accessibility-Blogs)). If interested, see the open access PDF of the full article (which includes the mathematical formulation for the spatial availability function) in the references [@soukhovIntroducingSpatialAvailability2023]. 
+
+_The data used in this section is a subset of data from {TTS2016R}, the plots are created using {tmap}, and spatial objects are manipulated using {sf}, along with base {R} functions._
+
+\newpage
+# References
+
+<!-- 
+\bibsplit[2]
+
+Use \bibsplit to split the references from the body of the text. Value "[2]" represents the number of reference in the left column (Note: Please avoid single column figures & tables on this page.) -->
+
+:::{#refs}
+
+:::
+
+<!-- 
+DO NOT EDIT BELOW THIS COMMENT
+-->
+
+\newpage
+
+```{=tex}
+% LAST PAGE
+% This page is left blank on purpose
+
+% Set style for this page
+\thispagestyle{empty}
+
+% Council logo at bottom
+\begin{center}
+    \begin{figure}[b]
+        \includegraphics[width=\textwidth]{images/sshrc-canada-banner.png}
+    \end{figure}    
+\end{center}
+```

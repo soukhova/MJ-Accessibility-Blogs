@@ -1,0 +1,14 @@
+% TODO: Add custom LaTeX header directives here
+
+\usepackage{xstring}
+
+\newcommand*{\ExtractFirstChar}[1]{%
+    %% #1 = string to extract first char from
+    %\fullexpandarg
+    %\IfBeginWith{#1}{\{}{%
+    %    \StrChar{#1}{2}[\FirstChar]%
+    %}{%
+        \StrChar{#1}{1}[\FirstChar]%
+    %}%
+    \FirstChar
+}

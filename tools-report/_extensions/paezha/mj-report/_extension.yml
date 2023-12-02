@@ -1,0 +1,17 @@
+title: Mj-report
+author: Antonio Paez
+version: 1.0.0
+quarto-required: ">=1.3.0"
+contributes:
+  formats:
+    pdf:
+      toc: false
+      include-in-header: header.tex
+      format-resources:
+        - mj-template.tex
+        - mobilizing-justice.sty
+      template-partials:
+        - "partials/doc-class.tex"
+        - "partials/title.tex"
+        - "partials/before-body.tex"
+
