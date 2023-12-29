@@ -23,7 +23,7 @@ author:
         department: School of Earth, Environment and Society
     email: paezha@mcmaster.ca
 # Date: default is last modified but could be a string.  
-date: last-modified
+date: 2024-01-02
 
 # Place the cover image and the toc image in folder `images`
 cover_image: potential-access-cover-image.jpeg
@@ -43,11 +43,11 @@ bibliography: bibliography.bib
 
 This report presents accessibility analysis for planning applications: it walks readers through the components of accessibility analysis as well as its potential uses when planning for equity. 
 
-The first section explores how travel behaviour enters accessibility measures through the _impedance function_, the implications of travel behaviour assumptions and how analysts may select parameters for these assumptions. 
+The first part explores how travel behaviour enters accessibility measures through the _impedance function_, the implications of travel behaviour assumptions and how analysts may select parameters for these assumptions. 
 
-In the second section, two types of accessibility measures, *unconstrained* and *constrained*, are defined and presented in an empirical example. The distinction in the interpretation between the output from both types of measures are clearly described. 
+In the second part, two types of accessibility measures, *unconstrained* and *constrained*, are defined and presented in an empirical example. The distinction in the interpretation between the output from both types of measures are clearly described. 
 
-In subsequent sections, how to center equity and justice conceptualizations in accessibility analysis will be explored.
+How to center equity and justice conceptualizations in accessibility analysis will be explored in subsequent reports.
 
 \newpage
 # Part I: Impedance functions {#sec-partI}
@@ -204,7 +204,7 @@ The cost $c_{ij}$ can be distance, time, financial cost, or a combination of sev
 
 In short, the impedance function $f(c_{ij})$ allows the accessibility analyst to precisely define a measure of travel behavior: the relationship between the "population" at an origin and where they usually, want, or can go to reach "opportunities" at destinations.
 
-From this perspective, the definition of the impedance function $f(c_{ij})$ is incredibly important. Let's go over commonly defined impedance functions $f(\bullet)$ in accessibility research and their impact on opportunity-counting (the summation of opportunities) at specific travel costs $c_{ij}$, namely:
+From this perspective, the definition of the impedance function $f(c_{ij})$ is incredibly important. Going over commonly defined impedance functions $f(\bullet)$ in accessibility research and their impact on opportunity-counting (the summation of opportunities) at specific travel costs $c_{ij}$, namely:
 
 - Binary (@eq-binary-access)
 - Uniform distribution (@eq-uniform-imped)
@@ -323,9 +323,9 @@ exp_ <- fitdistrplus::fitdist(data=all_tt, "exp", method="mme", optim.method="Ne
 red_empirical <- empirical |> filter (x <= 30)
 ```
 
-In our example, the y-axis $f(c_{ij})$ is the probability density of a trip at a given travel cost in minutes of travel $c_{ij}$. It can be observed that the probability density of a trip is highest when travel time is around `r empirical |> filter(f == max(f)) |> pull(x) |> prettyNum(digits=2)` minutes. It can also be seen that beyond the 30 min mark approximately, the rate of probability density drastically decreases. So, the probability of a trip of length 0 to 30 mins occurring is `r sum(diff(sort(red_empirical$x)) * 0.5 * (red_empirical$f[-1] + head(red_empirical$f, -1))) |> scales::percent()` (the area under the curve between these two x-value points is `r sum(diff(sort(red_empirical$x)) * 0.5 * (red_empirical$f[-1] + head(red_empirical$f, -1))) |> round(digits=2)`). Trips outside of this range make up the remaining probability. 
+In our example, the y-axis $f(c_{ij})$ is the probability density of a trip at a given travel cost in minutes of travel $c_{ij}$. It can be observed that the probability density of a trip is highest when travel time is around `r empirical %>% filter(f == max(f)) %>% dplyr::pull(x) %>% prettyNum(digits=2)` minutes. It can also be seen that beyond the 30 min mark approximately, the rate of probability density drastically decreases. So, the probability of a trip of length 0 to 30 mins occurring is `r sum(diff(sort(red_empirical$x)) * 0.5 * (red_empirical$f[-1] + head(red_empirical$f, -1))) |> scales::percent()` (the area under the curve between these two x-value points is `r sum(diff(sort(red_empirical$x)) * 0.5 * (red_empirical$f[-1] + head(red_empirical$f, -1))) |> round(digits=2)`). Trips outside of this range make up the remaining probability. 
 
-Now let's fit the parameters of the uniform, exponential, and gamma functions (@eq-uniform-imped, @eq-exp-imped, @eq-gamma-imped) as closely to the TLD captured in @fig-TLD-empirical. The R package [{fitdistrplus}](https://cloud.r-project.org/web/packages/fitdistrplus/index.html) was used to generate parameters that best fit the TLD. The moment matching estimation (MME) fitting method and the Nelder-Mead direct optimization algorithm are used [@Muller2016]. The default values for the parameters of the three functions are summarised:
+Now we fit the parameters of the uniform, exponential, and gamma functions (@eq-uniform-imped, @eq-exp-imped, @eq-gamma-imped) as closely to the TLD captured in @fig-TLD-empirical. The R package [{fitdistrplus}](https://cloud.r-project.org/web/packages/fitdistrplus/index.html) was used to generate parameters that best fit the TLD. The moment matching estimation (MME) fitting method and the Nelder-Mead direct optimization algorithm are used [@Muller2016]. The default values for the parameters of the three functions are summarised:
 
 -   $f(c_{ij})^{uniform}$: $T_{min}$ and $T_{max}$ is 0 and `r unif_$estimate[2] |> prettyNum(digits=1)` mins, respectively.
 
@@ -511,7 +511,7 @@ Within the context of transportation planning, accessibility (or potential acces
 
 In this section, we distinguish between two types of accessibility measures: *unconstrained* and *constrained* measures. The distinction is important to help accessibility analysts to more clearly interpret outputs. 
 
-First, let's detail **unconstrained** accessibility. The general form of the unconstrained measure, let's call it $S_i$, is the measure proposed by [@hansen1959]. Many accessibility measures are derived and continue to be derived from this proposed formulation. $S_i$ is an accessibility value that is calculated for each spatial unit, and is appropriately termed *location-based accessibility*. This value is the summation of all the $O_j$ available (i.e., reachable) at each spatial unit according to some impedance function $f(c_{ij})$. $S_i$ is defined in @eq-hansen-access-2:
+First, we detail **unconstrained** accessibility. The general form of the unconstrained measure, let's call it $S_i$, is the measure proposed by [@hansen1959]. Many accessibility measures are derived and continue to be derived from this proposed formulation. $S_i$ is an accessibility value that is calculated for each spatial unit, and is appropriately termed *location-based accessibility*. This value is the summation of all the $O_j$ available (i.e., reachable) at each spatial unit according to some impedance function $f(c_{ij})$. $S_i$ is defined in @eq-hansen-access-2:
 
 $$
 S_i = \sum_{j=1}^JO_j \cdot f(c_{ij})
@@ -580,7 +580,7 @@ ggplot(data = fit_dgamma) + geom_line(aes(x=x, y=f), size=0.6, color = "blue") +
 ggsave("images/post2-fig1.png")
 ```
 
-The {accessibility} package is used to conveniently calculate unconstrained accessibility $S_i$ (@eq-hansen-access-2) and singly-constrained competitive accessibility $V_i$ (@eq-spatial-avail). The resulting $S_i$ (Purples) and $V_i$ (Greens) are shown in @fig-raw-con-and-unconstrained-access below:
+The {accessibility} package is used to conveniently calculate unconstrained accessibility $S_i$ (@eq-hansen-access-2) and singly-constrained competitive accessibility $V_i$ (@eq-spatial-avail). The resulting $S_i$ (Purples) and $V_i$ (Greens) are shown in @fig-raw-con-and-unconstrained-access. Both measures reflect *potential interaction* with jobs based on empirical home-to-work travel behaviour in Hamilton: people who reside in each spatial unit make certain trips to other spatial units (in Hamilton) and these trips have a certain travel time (travel cost $c_ij$) with associated gamma impedance $f(c_{ij}$ value. These observed trip patterns inform the calculated $S_i$ and $V_i$ values for each spatial unit. What's notable is the difference in the **magnitude** and the **interpretation** of unconstrained ($S_i$) and constrained ($V_i$) values.
 
 ```{r using-accessibilitypackage, include=FALSE}
 #Reformatting for input into the accessibility() function. 
@@ -861,16 +861,13 @@ jobs_tm <-
 
 workers_jobs_plot <- tmap_arrange(workers_tm, jobs_tm, ncol = 2)
 ```
-
 ```{r}
 #| label: fig-raw-con-and-unconstrained-access
-#| fig-cap: "The calculate unconstrained (Si) and constrained (Vi) accessibility (a.k.a. spatial availability) scores for the City of Hamilton. Calculated using an empirically calibrated gamma distribution travel impedance function."
+#| fig-cap: "The unconstrained (Si) and constrained (Vi) accessibility (a.k.a. spatial availability) scores for the City of Hamilton. Calculated using an empirically calibrated gamma distribution travel impedance function."
 #| 
 uncon_con_raw_plot
 tmap_save(uncon_con_raw_plot, "images/post2-fig2.png", height=5)
 ```
-
-In @fig-raw-con-and-unconstrained-access, the raw $S_i$ and $V_i$ scores are presented. Both measures reflect *potential interaction* with jobs based on empirical home-to-work travel behaviour in Hamilton: people who reside in each spatial unit make certain trips to other spatial units (in Hamilton) and these trips have a certain travel time (travel cost $c_ij$) with associated gamma impedance $f(c_{ij}$ value. These observed trip patterns inform the calculated $S_i$ and $V_i$ values for each spatial unit. What's notable is the difference in the **magnitude** and the **interpretation** of unconstrained ($S_i$) and constrained ($V_i$) values, let's discuss.
 
 Looking at the left plot $S_i$ in @fig-raw-con-and-unconstrained-access, the values reflect the sum of jobs that can be potentially interacted with by the population at each $i$ multiplied by their probability of being reached as informed by the calculated travel impedance $f(c_{ij})$ value. The maximum $S_i$ value is the darkest purple, and that value means that people who reside in those spatial units have the _lowest_ travel impedance and _highest_ concentration of potential job interaction for the region. The value itself does not have a specific meaning as it is just the sum of 'weighted' jobs: it can be interpreted as a relative score of potential interaction based on the observed trip patterns of people who reside in the City. For instance, areas within the centre of Hamilton have the highest values, this is both where jobs are largely clustered as well as major roadways (highways are pictured) and denser street networks. 
 
@@ -910,8 +907,8 @@ In this section, we outlined two branches of accessibility measures: unconstrain
 
 $V_i$ provides insights that $S_i$ does not. Firstly, it considers considers competition from demand. Secondly, it does not need to be standardized to be understood. These two insights are important:
 
-- **Considering competition**: places of employment are a _non-divisible_ type of opportunity, they only allow one person to take one job. Unless there's a reason to _not_ consider competition, measuring access to opportunities that have some capacity using an unconstrained measure $S_i$ does not make much theoretical sense from an opportunity-planning perspective; this will be explored in subsequent post(s).
-- **Interpretation**: a spatial unit has a certain number of $V_i$, opportunities that are spatially available for interaction. We can tangibly interpret if that's high or low (out of the total number of opportunities). Further, we can also divide $V_i$ by population at that origin to obtain opportunity per capita values. This value can be used as a benchmark to compare opportunity per capita or levels of service across areas of the region, between regions, and/or across time; again, this will be explored in subsequent post(s).
+- **Considering competition**: places of employment are a _non-divisible_ type of opportunity, they only allow one person to take one job. Unless there's a reason to _not_ consider competition, measuring access to opportunities that have some capacity using an unconstrained measure $S_i$ does not make much theoretical sense; this will be explored in subsequent report(s).
+- **Interpretation**: a spatial unit has a certain number of $V_i$, opportunities that are spatially available for interaction. We can tangibly interpret if that's high or low (out of the total number of opportunities). Further, we can also divide $V_i$ by population at that origin to obtain opportunity per capita values. This value can be used as a benchmark to compare opportunity per capita or levels of service across areas of the region, between regions, and/or across time; again, this will be explored in subsequent report(s).
 
 Ultimately, unconstrained accessibility $S_i$ tells you how many opportunities can be potentially reached. Spatial availability $V_i$ tells you how many opportunities are _available_ based on how many can be potentially reached and demanded.
 

@@ -109,7 +109,7 @@ $if(citation)$
     $endif$
   %$for(by-author)$
   %  {$by-author.name.literal$},
-  $endfor$ (\the\year). \textit{$title$} (Report No. $citation.number$). Mobilizing Justice. \url{$citation.url$}
+  $endfor$ (2024). \textit{$title$} (Report No. $citation.number$). Mobilizing Justice. \url{$citation.url$}
   \vskip 20pt
   %
   % Bibtex citation card
@@ -129,7 +129,7 @@ $if(citation)$
                                           ${by-author/last}
                                         $endif$\},\\
            \hspace*{1.6cm} title = \{$title$\},\\
-           \hspace*{1.6cm} year = \{\the\year\},\\
+           \hspace*{1.6cm} year = {2024},\\
            \hspace*{1.6cm} institution = \{Mobilizing Justice\},\\
            \hspace*{1.6cm} number = \{$citation.number$\},\\
            \hspace*{1.6cm} url = \{$citation.url$\}\\

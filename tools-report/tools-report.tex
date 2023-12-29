@@ -149,7 +149,9 @@
 
 % TODO: Add custom LaTeX header directives here
 
-\usepackage{xstring}
+\usepackage{xstring} 
+
+\usepackage[none]{hyphenat} %removes the hyphenation across lines for the justified setting.
 
 \newcommand*{\ExtractFirstChar}[1]{%
     %% #1 = string to extract first char from
@@ -238,7 +240,7 @@
 \makeatother
 \subtitle{Accessibility analysis for planning applications}
 \author{Anastasia Soukhov \and Antonio Páez}
-\date{2023-12-01}
+\date{2024-01-02}
 
 \begin{document}
 %-----------------------------------------------------------------------------%
@@ -296,7 +298,7 @@ for planning applications}}}\par%
 % HERE GOES THE DOCUMENT TYPE; CURRENTLY HARDCODED BUT COULD BE AN INPUT IN template.qmd
 {\relscale{1.25}{\textcolor{Yellow}{Tools and guidelines report}}}\hfill
 % HERE GOES THE DATE OF PUBLICATION
-{\relscale{1.0}{\textcolor{LightGray}{2023-12-01}}}
+{\relscale{1.0}{\textcolor{LightGray}{2024-01-02}}}
         
 % Report information: Needs information that is in file template.qmd
 \begin{flushleft}
@@ -346,7 +348,7 @@ This \href{https://github.com/soukhova/MJ-Accessibility-Blogs}{report} is publis
               {Páez, \ExtractFirstChar{Antonio}.}
           %  %  {Anastasia Soukhov},
     %  {Antonio Páez},
-   (\the\year). \textit{Accessibility analysis for planning
+   (2024). \textit{Accessibility analysis for planning
 applications} (Report No. MJ-0002). Mobilizing Justice. \url{https://github.com/soukhova/MJ-Accessibility-Blogs}
   \vskip 20pt
   %
@@ -361,7 +363,7 @@ applications} (Report No. MJ-0002). Mobilizing Justice. \url{https://github.com/
                                                                                 \},\\
            \hspace*{1.6cm} title = \{Accessibility analysis for planning
 applications\},\\
-           \hspace*{1.6cm} year = \{\the\year\},\\
+           \hspace*{1.6cm} year = {2024},\\
            \hspace*{1.6cm} institution = \{Mobilizing Justice\},\\
            \hspace*{1.6cm} number = \{MJ-0002\},\\
            \hspace*{1.6cm} url = \{https://github.com/soukhova/MJ-Accessibility-Blogs\}\\
@@ -486,7 +488,7 @@ University}}}%
 %-----------------------------------------------------------------------------%
 % END OF TABLE OF CONTENTS
 %-----------------------------------------------------------------------------%
-\newpage\ifdefined\Shaded\renewenvironment{Shaded}{\begin{tcolorbox}[interior hidden, breakable, boxrule=0pt, frame hidden, borderline west={3pt}{0pt}{shadecolor}, sharp corners, enhanced]}{\end{tcolorbox}}\fi
+\newpage\ifdefined\Shaded\renewenvironment{Shaded}{\begin{tcolorbox}[boxrule=0pt, interior hidden, sharp corners, borderline west={3pt}{0pt}{shadecolor}, frame hidden, breakable, enhanced]}{\end{tcolorbox}}\fi
 
 \hypertarget{executive-summary}{%
 \section{Executive summary}\label{executive-summary}}
@@ -495,18 +497,18 @@ This report presents accessibility analysis for planning applications:
 it walks readers through the components of accessibility analysis as
 well as its potential uses when planning for equity.
 
-The first section explores how travel behaviour enters accessibility
+The first part explores how travel behaviour enters accessibility
 measures through the \emph{impedance function}, the implications of
 travel behaviour assumptions and how analysts may select parameters for
 these assumptions.
 
-In the second section, two types of accessibility measures,
+In the second part, two types of accessibility measures,
 \emph{unconstrained} and \emph{constrained}, are defined and presented
 in an empirical example. The distinction in the interpretation between
 the output from both types of measures are clearly described.
 
-In subsequent sections, how to center equity and justice
-conceptualizations in accessibility analysis will be explored.
+How to center equity and justice conceptualizations in accessibility
+analysis will be explored in subsequent reports.
 
 \newpage
 
@@ -585,7 +587,7 @@ relationship between the ``population'' at an origin and where they
 usually, want, or can go to reach ``opportunities'' at destinations.
 
 From this perspective, the definition of the impedance function
-\(f(c_{ij})\) is incredibly important. Let's go over commonly defined
+\(f(c_{ij})\) is incredibly important. Going over commonly defined
 impedance functions \(f(\bullet)\) in accessibility research and their
 impact on opportunity-counting (the summation of opportunities) at
 specific travel costs \(c_{ij}\), namely:
@@ -804,7 +806,7 @@ occurring is 95\% (the area under the curve between these two x-value
 points is 0.95). Trips outside of this range make up the remaining
 probability.
 
-Now let's fit the parameters of the uniform, exponential, and gamma
+Now we fit the parameters of the uniform, exponential, and gamma
 functions (Equation~\ref{eq-uniform-imped}, Equation~\ref{eq-exp-imped},
 Equation~\ref{eq-gamma-imped}) as closely to the TLD captured in
 Figure~\ref{fig-TLD-empirical}. The R package
@@ -907,8 +909,8 @@ measures: \emph{unconstrained} and \emph{constrained} measures. The
 distinction is important to help accessibility analysts to more clearly
 interpret outputs.
 
-First, let's detail \textbf{unconstrained} accessibility. The general
-form of the unconstrained measure, let's call it \(S_i\), is the measure
+First, we detail \textbf{unconstrained} accessibility. The general form
+of the unconstrained measure, let's call it \(S_i\), is the measure
 proposed by (Hansen 1959). Many accessibility measures are derived and
 continue to be derived from this proposed formulation. \(S_i\) is an
 accessibility value that is calculated for each spatial unit, and is
@@ -1103,7 +1105,16 @@ unconstrained accessibility \(S_i\) (Equation~\ref{eq-hansen-access-2})
 and singly-constrained competitive accessibility \(V_i\)
 (Equation~\ref{eq-spatial-avail}). The resulting \(S_i\) (Purples) and
 \(V_i\) (Greens) are shown in
-Figure~\ref{fig-raw-con-and-unconstrained-access} below:
+Figure~\ref{fig-raw-con-and-unconstrained-access}. Both measures reflect
+\emph{potential interaction} with jobs based on empirical home-to-work
+travel behaviour in Hamilton: people who reside in each spatial unit
+make certain trips to other spatial units (in Hamilton) and these trips
+have a certain travel time (travel cost \(c_ij\)) with associated gamma
+impedance \(f(c_{ij}\) value. These observed trip patterns inform the
+calculated \(S_i\) and \(V_i\) values for each spatial unit. What's
+notable is the difference in the \textbf{magnitude} and the
+\textbf{interpretation} of unconstrained (\(S_i\)) and constrained
+(\(V_i\)) values.
 
 \begin{figure}
 
@@ -1111,23 +1122,12 @@ Figure~\ref{fig-raw-con-and-unconstrained-access} below:
 
 }
 
-\caption{\label{fig-raw-con-and-unconstrained-access}The calculate
-unconstrained (Si) and constrained (Vi) accessibility (a.k.a. spatial
-availability) scores for the City of Hamilton. Calculated using an
-empirically calibrated gamma distribution travel impedance function.}
+\caption{\label{fig-raw-con-and-unconstrained-access}The unconstrained
+(Si) and constrained (Vi) accessibility (a.k.a. spatial availability)
+scores for the City of Hamilton. Calculated using an empirically
+calibrated gamma distribution travel impedance function.}
 
 \end{figure}
-
-In Figure~\ref{fig-raw-con-and-unconstrained-access}, the raw \(S_i\)
-and \(V_i\) scores are presented. Both measures reflect \emph{potential
-interaction} with jobs based on empirical home-to-work travel behaviour
-in Hamilton: people who reside in each spatial unit make certain trips
-to other spatial units (in Hamilton) and these trips have a certain
-travel time (travel cost \(c_ij\)) with associated gamma impedance
-\(f(c_{ij}\) value. These observed trip patterns inform the calculated
-\(S_i\) and \(V_i\) values for each spatial unit. What's notable is the
-difference in the \textbf{magnitude} and the \textbf{interpretation} of
-unconstrained (\(S_i\)) and constrained (\(V_i\)) values, let's discuss.
 
 Looking at the left plot \(S_i\) in
 Figure~\ref{fig-raw-con-and-unconstrained-access}, the values reflect
@@ -1289,8 +1289,7 @@ standardized to be understood. These two insights are important:
   to take one job. Unless there's a reason to \emph{not} consider
   competition, measuring access to opportunities that have some capacity
   using an unconstrained measure \(S_i\) does not make much theoretical
-  sense from an opportunity-planning perspective; this will be explored
-  in subsequent post(s).
+  sense; this will be explored in subsequent report(s).
 \item
   \textbf{Interpretation}: a spatial unit has a certain number of
   \(V_i\), opportunities that are spatially available for interaction.
@@ -1300,7 +1299,7 @@ standardized to be understood. These two insights are important:
   This value can be used as a benchmark to compare opportunity per
   capita or levels of service across areas of the region, between
   regions, and/or across time; again, this will be explored in
-  subsequent post(s).
+  subsequent report(s).
 \end{itemize}
 
 Ultimately, unconstrained accessibility \(S_i\) tells you how many
