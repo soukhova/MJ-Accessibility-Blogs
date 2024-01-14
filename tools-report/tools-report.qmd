@@ -36,7 +36,7 @@ citation:
   # doi: "10.23915/reprodocs.00010"
   issued: last-modified
   url: https://github.com/soukhova/MJ-Accessibility-Blogs
-  number: "MJ-0002"
+  number: "MJ-A2-0002"
 bibliography: bibliography.bib
 ---
 # Executive summary
